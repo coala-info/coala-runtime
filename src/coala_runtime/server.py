@@ -53,7 +53,7 @@ class PythonExecutorInput(BaseModel):
     )
     packages: Optional[List[str]] = Field(
         default_factory=list,
-        description="Additional Python packages to install via uv. Default packages (numpy, pandas, matplotlib) are always included. Examples: ['scikit-learn', 'seaborn', 'requests>=2.31.0']",
+        description="Additional Python packages to install via uv. The default image already includes numpy, pandas, matplotlib. Examples: ['scikit-learn', 'seaborn', 'requests>=2.31.0']",
     )
     input_files: Optional[Dict[str, str]] = Field(
         default_factory=dict,
@@ -236,7 +236,7 @@ async def coala_python_executor(
     - Dynamic package installation using uv (faster than pip)
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
-    - Default packages: numpy, pandas, matplotlib
+    - Default image includes numpy, pandas, matplotlib
 
     Args:
         params (PythonExecutorInput): Validated input parameters containing:
@@ -245,7 +245,7 @@ async def coala_python_executor(
             - script_file (str): Path to Python script file to execute (either script or script_file must be provided).
               Prefer using script_file when possible, especially if script parameter fails.
             - packages (Optional[List[str]]): Additional packages to install via uv.
-              Default packages (numpy, pandas, matplotlib) are always included.
+              The default image already includes numpy, pandas, matplotlib.
               Can include version specifiers (e.g., 'requests>=2.31.0').
             - input_files (Optional[Dict[str, str]]): Map of container paths to host paths
               for bind-mounting files into the container.

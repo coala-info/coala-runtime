@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 class RExecutor(BaseExecutor):
     """Executor for R scripts using r2u and BiocManager."""
 
-    DEFAULT_IMAGE = "coala-runtime-r:latest"
-    DEFAULT_PACKAGES = ["tidyverse"]
+    DEFAULT_IMAGE = "hubentu/coala-runtime-r:latest"
+    # Pre-installed in the default image; skip installing when user requests them
+    DEFAULT_PACKAGES: List[str] = ["tidyverse"]
 
     def __init__(
         self,
@@ -22,7 +23,7 @@ class RExecutor(BaseExecutor):
         """Initialize R executor.
 
         Args:
-            image: Docker image to use (default: coala-runtime-r:latest)
+            image: Docker image to use (default: hubentu/coala-runtime-r:latest)
             output_dir: Output directory path
         """
         super().__init__(image or self.DEFAULT_IMAGE, output_dir=output_dir)
@@ -54,9 +55,8 @@ class RExecutor(BaseExecutor):
         # Build R installation script
         r_script_parts = []
 
-        # Install CRAN packages
+        # Install CRAN packages (only those not already in the default image)
         if cran_packages:
-            # Filter out default packages
             packages_to_install = [pkg for pkg in cran_packages if pkg not in self.DEFAULT_PACKAGES]
             if packages_to_install:
                 # Use single quotes for package names in R

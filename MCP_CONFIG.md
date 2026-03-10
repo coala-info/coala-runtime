@@ -20,7 +20,23 @@ This document explains how to configure the Coala Runtime MCP server in various 
 
 ### Cursor IDE
 
-Add the following to your Cursor settings (usually in `~/.cursor/mcp.json` or via Settings → MCP):
+Add the following to your Cursor settings (usually in `~/.cursor/mcp.json` or via Settings → MCP).
+
+With the package installed, you can run the `coala-runtime` command:
+
+```json
+{
+  "mcpServers": {
+    "coala-runtime": {
+      "command": "coala-runtime",
+      "args": [],
+      "cwd": "/path/to/coala-runtime"
+    }
+  }
+}
+```
+
+Or with `uv run` from the project directory:
 
 ```json
 {
@@ -29,28 +45,24 @@ Add the following to your Cursor settings (usually in `~/.cursor/mcp.json` or vi
       "command": "uv",
       "args": [
         "run",
-        "python",
-        "-m",
-        "coala_runtime"
-      ],
-      "cwd": "/home/qhu/Workspace/coala_runtime"
+        "--directory",
+        "/path/to/coala-runtime",
+        "coala-runtime"
+      ]
     }
   }
 }
 ```
 
-Or if using `python` directly:
+Or with `python -m`:
 
 ```json
 {
   "mcpServers": {
     "coala-runtime": {
       "command": "python",
-      "args": [
-        "-m",
-        "coala_runtime"
-      ],
-      "cwd": "/home/qhu/Workspace/coala_runtime"
+      "args": ["-m", "coala_runtime"],
+      "cwd": "/path/to/coala-runtime"
     }
   }
 }
@@ -64,12 +76,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 {
   "mcpServers": {
     "coala-runtime": {
-      "command": "python",
-      "args": [
-        "-m",
-        "coala_runtime"
-      ],
-      "cwd": "/home/qhu/Workspace/coala_runtime"
+      "command": "coala-runtime",
+      "args": []
     }
   }
 }
@@ -83,11 +91,8 @@ The server uses stdio transport, so it can be configured in any MCP client that 
 {
   "mcpServers": {
     "coala-runtime": {
-      "command": "python",
-      "args": ["-m", "coala_runtime"],
-      "env": {
-        "PYTHONPATH": "/home/qhu/Workspace/coala_runtime/src"
-      }
+      "command": "coala-runtime",
+      "args": []
     }
   }
 }
@@ -105,10 +110,8 @@ If you're using `uv` for Python management, you can use:
       "args": [
         "run",
         "--directory",
-        "/home/qhu/Workspace/coala_runtime",
-        "python",
-        "-m",
-        "coala_runtime"
+        "/path/to/coala-runtime",
+        "coala-runtime"
       ]
     }
   }
@@ -123,8 +126,8 @@ You can optionally set environment variables for the server:
 {
   "mcpServers": {
     "coala-runtime": {
-      "command": "python",
-      "args": ["-m", "coala_runtime"],
+      "command": "coala-runtime",
+      "args": [],
       "env": {
         "DOCKER_HOST": "unix:///var/run/docker.sock",
         "LOG_LEVEL": "INFO"
@@ -154,7 +157,7 @@ docker ps
 ### Module not found
 Make sure the package is installed:
 ```bash
-cd /home/qhu/Workspace/coala_runtime
+cd /path/to/coala-runtime
 uv pip install -e .
 ```
 
@@ -168,8 +171,8 @@ Ensure the user running the MCP client has permission to:
 You can test the server directly:
 
 ```bash
-cd /home/qhu/Workspace/coala_runtime
-python -m coala_runtime
+cd /path/to/coala-runtime
+coala-runtime
 ```
 
 The server will communicate via stdio, so you won't see output unless you send MCP protocol messages.

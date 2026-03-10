@@ -9,7 +9,7 @@ An MCP (Model Context Protocol) server for executing Python and R scripts in con
   - Python: Uses `uv` for fast package installation
   - R: Uses `r2u` and `BiocManager` for CRAN and Bioconductor packages
 - **File Mounting**: Bind-mount local files and directories into containers
-- **Default Packages**: Pre-installed common packages (numpy, pandas, matplotlib for Python; tidyverse for R)
+- **Pre-installed packages**: Python image includes numpy, pandas, matplotlib; R image includes tidyverse
 - **MCP Integration**: Exposes `coala_python_executor` and `coala_r_executor` tools for LLM interaction
 
 ## Prerequisites
@@ -28,9 +28,22 @@ uv pip install -e .
 pip install -e .
 ```
 
-## Building Docker Images
+## Docker Images
 
-Build the required Docker images:
+By default, the server **pulls** the executor images from Docker Hub if they are not present locally:
+
+- `hubentu/coala-runtime-python:latest` → tagged as `coala-runtime-python:latest`
+- `hubentu/coala-runtime-r:latest` → tagged as `coala-runtime-r:latest`
+
+To **build** the images locally instead (e.g. for development or custom Dockerfiles), run with `--build` or build manually:
+
+```bash
+coala-runtime --build
+# or
+python -m coala_runtime --build
+```
+
+Manual build (same as `--build`):
 
 ```bash
 ./docker/build.sh
@@ -47,8 +60,16 @@ This creates:
 The server can be run as an MCP server for LLM integration:
 
 ```bash
+coala-runtime
+```
+
+Or with the module runner:
+
+```bash
 python -m coala_runtime
 ```
+
+Use `coala-runtime --build` (or `python -m coala_runtime --build`) to build Docker images locally before starting.
 
 ### Configuration
 
@@ -62,7 +83,7 @@ Executes Python scripts in a containerized environment with uv package managemen
 
 **Input:**
 - `script` (required): Python script code to execute
-- `packages` (optional): Additional packages to install via uv (default packages: numpy, pandas, matplotlib are always included). Can include version specifiers (e.g., 'requests>=2.31.0')
+- `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, matplotlib. Can include version specifiers (e.g., 'requests>=2.31.0')
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
 
@@ -82,7 +103,7 @@ Executes R scripts in a containerized environment with r2u and BiocManager.
 
 **Input:**
 - `script` (required): R script code to execute
-- `packages` (optional): Additional R packages to install. Use 'bioc::package_name' format for Bioconductor packages. Default package 'tidyverse' is always included. Examples: ['ggplot2', 'dplyr', 'bioc::Biobase']
+- `packages` (optional): Additional R packages to install. Use 'bioc::package_name' format for Bioconductor packages. The image already includes tidyverse. Examples: ['ggplot2', 'dplyr', 'bioc::Biobase']
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
 

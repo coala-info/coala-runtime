@@ -197,17 +197,19 @@ class BaseExecutor(ABC):
             execution_logs.append("Starting script execution")
             execution_logs.append("=" * 60)
 
-            # Install packages
+            # Install packages (get_install_command filters out pre-installed defaults)
             all_packages = self.get_default_packages() + (packages or [])
+            default_set = set(self.get_default_packages())
+            packages_to_install = [p for p in all_packages if p not in default_set]
             install_stdout = ""
             install_stderr = ""
 
             if all_packages:
                 install_cmd = self.get_install_command(all_packages)
-                logger.info(f"Installing packages: {all_packages}")
+                logger.info(f"Installing packages: {packages_to_install}")
                 execution_logs.append("\n[PACKAGE INSTALLATION]")
                 execution_logs.append(f"Command: {install_cmd}")
-                execution_logs.append(f"Requested packages: {all_packages}")
+                execution_logs.append(f"Packages to install: {packages_to_install}")
                 execution_logs.append("-" * 60)
 
                 exit_code, stdout, stderr = await self.container_manager.exec_command(

@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 class PythonExecutor(BaseExecutor):
     """Executor for Python scripts using uv."""
 
-    DEFAULT_IMAGE = "coala-runtime-python:latest"
-    DEFAULT_PACKAGES = ["numpy", "pandas", "matplotlib"]
+    DEFAULT_IMAGE = "hubentu/coala-runtime-python:latest"
+    # Pre-installed in the default image; skip installing when user requests them
+    DEFAULT_PACKAGES: List[str] = ["numpy", "pandas", "matplotlib"]
 
     def __init__(
         self,
@@ -22,7 +23,7 @@ class PythonExecutor(BaseExecutor):
         """Initialize Python executor.
 
         Args:
-            image: Docker image to use (default: coala-runtime-python:latest)
+            image: Docker image to use (default: hubentu/coala-runtime-python:latest)
             output_dir: Output directory path
         """
         super().__init__(image or self.DEFAULT_IMAGE, output_dir=output_dir)
@@ -36,7 +37,7 @@ class PythonExecutor(BaseExecutor):
         Returns:
             Installation command
         """
-        # Filter out already installed default packages to avoid re-installation
+        # Only install packages not already in the default image
         packages_to_install = [pkg for pkg in packages if pkg not in self.DEFAULT_PACKAGES]
         if not packages_to_install:
             return "echo 'No additional packages to install'"
