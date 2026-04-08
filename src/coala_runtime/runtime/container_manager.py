@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence, Union
 
 import docker
-from docker.errors import DockerException
+from docker.errors import DockerException, ImageNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,26 @@ class ContainerManager:
         """
         self.client = docker_client or docker.from_env()
         self.containers: Dict[str, docker.models.containers.Container] = {}
+
+    async def ensure_image(self, image: str) -> None:
+        """Pull ``image`` from a registry if it is not already present locally.
+
+        ``docker.containers.create`` fails with 404 when the image only exists on a
+        remote registry (e.g. quay.io/biocontainers/...). This matches ``docker run``
+        behavior, which pulls missing images by default.
+        """
+        loop = asyncio.get_event_loop()
+
+        def _ensure() -> None:
+            try:
+                self.client.images.get(image)
+                logger.debug("Docker image present locally: %s", image)
+            except ImageNotFound:
+                logger.info("Docker image not found locally, pulling: %s", image)
+                self.client.images.pull(image)
+                logger.info("Pulled Docker image: %s", image)
+
+        await loop.run_in_executor(None, _ensure)
 
     async def create_container(
         self,
@@ -45,6 +65,7 @@ class ContainerManager:
             Created container object
         """
         try:
+            await self.ensure_image(image)
             # Run in executor to avoid blocking
             loop = asyncio.get_event_loop()
             container = await loop.run_in_executor(
@@ -90,7 +111,7 @@ class ContainerManager:
     async def exec_command(
         self,
         container: docker.models.containers.Container,
-        command: str,
+        command: Union[str, Sequence[str]],
         workdir: Optional[str] = None,
         environment: Optional[Dict[str, str]] = None,
     ) -> tuple[int, bytes, bytes]:
@@ -98,7 +119,7 @@ class ContainerManager:
 
         Args:
             container: Container to execute command in
-            command: Command to execute
+            command: Shell string or argv list (list avoids shell quoting issues)
             workdir: Working directory for command
             environment: Environment variables
 

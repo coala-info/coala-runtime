@@ -119,6 +119,29 @@ class BaseExecutor(ABC):
         """
         pass
 
+    def compose_install_package_list(self, user_packages: List[str]) -> List[str]:
+        """Packages passed into install (Coala default image: defaults + user; custom image: user only)."""
+        return self.get_default_packages() + user_packages
+
+    def should_run_package_install(self, install_list: List[str]) -> bool:
+        """Whether to run the install command (subclasses may add conda-only installs)."""
+        return bool(install_list)
+
+    def pip_packages_to_install(self, all_packages: List[str]) -> List[str]:
+        """Packages to install via the language-specific installer (e.g. pip), excluding defaults."""
+        default_set = set(self.get_default_packages())
+        return [p for p in all_packages if p not in default_set]
+
+    def install_plan_log_details(self, all_packages: List[str], pip_targets: List[str]) -> str:
+        """Human-readable install plan for logs (subclasses may add conda, etc.)."""
+        return f"Packages to install: {pip_targets}"
+
+    async def prune_install_list_for_container(
+        self, container: Any, install_list: List[str]
+    ) -> List[str]:
+        """Drop install specs already satisfied in the container (custom images only; see subclasses)."""
+        return list(install_list)
+
     async def execute(
         self,
         script: Optional[str] = None,
@@ -126,6 +149,7 @@ class BaseExecutor(ABC):
         packages: Optional[List[str]] = None,
         input_files: Optional[Dict[str, str]] = None,
         timeout: int = 300,
+        skip_package_install: bool = False,
     ) -> ExecutionResult:
         """Execute a script in a container.
 
@@ -135,6 +159,7 @@ class BaseExecutor(ABC):
             packages: Additional packages to install
             input_files: Map of container paths to host paths
             timeout: Execution timeout in seconds (0 = no timeout)
+            skip_package_install: If True, do not run package installation (e.g. custom image with deps baked in)
 
         Returns:
             Execution result
@@ -197,48 +222,76 @@ class BaseExecutor(ABC):
             execution_logs.append("Starting script execution")
             execution_logs.append("=" * 60)
 
-            # Install packages (get_install_command filters out pre-installed defaults)
-            all_packages = self.get_default_packages() + (packages or [])
-            default_set = set(self.get_default_packages())
-            packages_to_install = [p for p in all_packages if p not in default_set]
-            install_stdout = ""
-            install_stderr = ""
-
-            if all_packages:
-                install_cmd = self.get_install_command(all_packages)
-                logger.info(f"Installing packages: {packages_to_install}")
+            if skip_package_install:
+                logger.info("Skipping package installation (skip_package_install=True)")
                 execution_logs.append("\n[PACKAGE INSTALLATION]")
-                execution_logs.append(f"Command: {install_cmd}")
-                execution_logs.append(f"Packages to install: {packages_to_install}")
+                execution_logs.append("Skipped (skip_package_install=True)")
                 execution_logs.append("-" * 60)
-
-                exit_code, stdout, stderr = await self.container_manager.exec_command(
-                    container, install_cmd
-                )
-                install_stdout = stdout.decode("utf-8", errors="replace")
-                install_stderr = stderr.decode("utf-8", errors="replace")
-
-                execution_logs.append(install_stdout)
-                if install_stderr:
-                    execution_logs.append(f"\n[STDERR]\n{install_stderr}")
-                execution_logs.append(f"\n[EXIT CODE: {exit_code}]")
-
-                if exit_code != 0:
-                    logs = "\n".join(execution_logs)
-                    return ExecutionResult(
-                        success=False,
-                        exit_code=exit_code,
-                        stdout=install_stdout,
-                        stderr=install_stderr,
-                        output_files=[],
-                        output_data="",
-                        container_logs=logs,
-                        execution_time=time.time() - start_time,
-                    )
             else:
-                execution_logs.append("\n[PACKAGE INSTALLATION]")
-                execution_logs.append("No packages to install")
-                execution_logs.append("-" * 60)
+                # Install packages (get_install_command filters pre-installed defaults on base image only)
+                install_list = self.compose_install_package_list(packages or [])
+                install_stdout = ""
+                install_stderr = ""
+
+                if self.should_run_package_install(install_list):
+                    before_prune = list(install_list)
+                    install_list = await self.prune_install_list_for_container(container, install_list)
+                    skipped_satisfied: List[str] = []
+                    if before_prune != install_list:
+                        after_set = set(install_list)
+                        skipped_satisfied = [x for x in before_prune if x not in after_set]
+                        if skipped_satisfied:
+                            logger.info(
+                                "Packages already satisfied in image (skipped): %s",
+                                skipped_satisfied,
+                            )
+                    packages_to_install = self.pip_packages_to_install(install_list)
+                    if self.should_run_package_install(install_list):
+                        install_cmd = self.get_install_command(install_list)
+                        plan_line = self.install_plan_log_details(install_list, packages_to_install)
+                        logger.info(plan_line)
+                        execution_logs.append("\n[PACKAGE INSTALLATION]")
+                        if skipped_satisfied:
+                            execution_logs.append(
+                                f"Already satisfied in image (skipped install): {skipped_satisfied}"
+                            )
+                        execution_logs.append(f"Command: {install_cmd}")
+                        execution_logs.append(plan_line)
+                        execution_logs.append("-" * 60)
+
+                        exit_code, stdout, stderr = await self.container_manager.exec_command(
+                            container, install_cmd
+                        )
+                        install_stdout = stdout.decode("utf-8", errors="replace")
+                        install_stderr = stderr.decode("utf-8", errors="replace")
+
+                        execution_logs.append(install_stdout)
+                        if install_stderr:
+                            execution_logs.append(f"\n[STDERR]\n{install_stderr}")
+                        execution_logs.append(f"\n[EXIT CODE: {exit_code}]")
+
+                        if exit_code != 0:
+                            logs = "\n".join(execution_logs)
+                            return ExecutionResult(
+                                success=False,
+                                exit_code=exit_code,
+                                stdout=install_stdout,
+                                stderr=install_stderr,
+                                output_files=[],
+                                output_data="",
+                                container_logs=logs,
+                                execution_time=time.time() - start_time,
+                            )
+                    else:
+                        execution_logs.append("\n[PACKAGE INSTALLATION]")
+                        execution_logs.append(
+                            "All requested packages already present in container image; nothing to install"
+                        )
+                        execution_logs.append("-" * 60)
+                else:
+                    execution_logs.append("\n[PACKAGE INSTALLATION]")
+                    execution_logs.append("No packages to install")
+                    execution_logs.append("-" * 60)
 
             # Execute script
             exec_cmd = self.get_execution_command(container_script_path)
