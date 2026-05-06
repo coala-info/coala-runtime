@@ -16,6 +16,11 @@ from coala_runtime.utils.output_parser import OutputParser
 logger = logging.getLogger(__name__)
 
 
+def _elapsed_s(start: float) -> str:
+    """Wall-clock seconds since ``start`` (for log lines)."""
+    return f"[+{time.time() - start:.2f}s]"
+
+
 class ExecutionResult:
     """Result of script execution."""
 
@@ -219,13 +224,51 @@ class BaseExecutor(ABC):
             # Collect all execution logs
             execution_logs = []
             execution_logs.append("=" * 60)
-            execution_logs.append("Starting script execution")
+            execution_logs.append("Coala Runtime — execution log")
+            execution_logs.append("=" * 60)
+            mount_lines = [
+                f"  {host} -> {spec['bind']} ({spec.get('mode', 'rw')})"
+                for host, spec in sorted(volumes.items(), key=lambda x: x[1].get("bind", ""))
+            ]
+            execution_logs.append("\n[RUNTIME]")
+            execution_logs.append(f"{_elapsed_s(start_time)} Job started")
+            execution_logs.append(f"Image: {self.image}")
+            execution_logs.append(f"Host output directory (mounted at /output): {self.output_dir}")
+            execution_logs.append(
+                f"Script timeout: {timeout}s" + (" (no limit)" if timeout == 0 else "")
+            )
+            execution_logs.append(f"Bind mounts ({len(volumes)}):")
+            execution_logs.extend(mount_lines)
+            execution_logs.append(
+                "Note: Docker collects each exec step's stdout/stderr only when that step finishes "
+                "(no live streaming). Long installs or scripts may pause here until they complete."
+            )
+            logger.info(
+                "Runtime job: image=%s mounts=%d timeout=%ss output=%s",
+                self.image,
+                len(volumes),
+                timeout,
+                self.output_dir,
+            )
+
+            execution_logs.append(f"\n{_elapsed_s(start_time)} STATUS: Container ready")
+            execution_logs.append(f"  container_id={container.id[:12]} status={container.status}")
+            logger.info(
+                "Container %s running after %ss",
+                container.id[:12],
+                f"{time.time() - start_time:.2f}",
+            )
+
+            execution_logs.append("\n" + "=" * 60)
+            execution_logs.append("Package install & script phases")
             execution_logs.append("=" * 60)
 
             if skip_package_install:
                 logger.info("Skipping package installation (skip_package_install=True)")
                 execution_logs.append("\n[PACKAGE INSTALLATION]")
-                execution_logs.append("Skipped (skip_package_install=True)")
+                execution_logs.append(
+                    f"{_elapsed_s(start_time)} STATUS: Skipped (skip_package_install=True)"
+                )
                 execution_logs.append("-" * 60)
             else:
                 # Install packages (get_install_command filters pre-installed defaults on base image only)
@@ -235,7 +278,17 @@ class BaseExecutor(ABC):
 
                 if self.should_run_package_install(install_list):
                     before_prune = list(install_list)
+                    execution_logs.append(
+                        f"{_elapsed_s(start_time)} STATUS: Resolving install list "
+                        "(custom images: probe container for packages already present)"
+                    )
+                    logger.info("Prune/install list resolution starting")
+                    _prune_t = time.time()
                     install_list = await self.prune_install_list_for_container(container, install_list)
+                    execution_logs.append(
+                        f"{_elapsed_s(start_time)} STATUS: Install list resolution done "
+                        f"({time.time() - _prune_t:.2f}s)"
+                    )
                     skipped_satisfied: List[str] = []
                     if before_prune != install_list:
                         after_set = set(install_list)
@@ -257,14 +310,28 @@ class BaseExecutor(ABC):
                             )
                         execution_logs.append(f"Command: {install_cmd}")
                         execution_logs.append(plan_line)
+                        execution_logs.append(
+                            f"{_elapsed_s(start_time)} STATUS: Running package install in container "
+                            "(output appears below when the install step completes)"
+                        )
                         execution_logs.append("-" * 60)
+                        logger.info("Package install exec starting")
 
+                        _inst_t = time.time()
                         exit_code, stdout, stderr = await self.container_manager.exec_command(
                             container, install_cmd
                         )
+                        _inst_dt = time.time() - _inst_t
                         install_stdout = stdout.decode("utf-8", errors="replace")
                         install_stderr = stderr.decode("utf-8", errors="replace")
 
+                        execution_logs.append(
+                            f"{_elapsed_s(start_time)} STATUS: Package install finished "
+                            f"({_inst_dt:.1f}s, exit {exit_code})"
+                        )
+                        logger.info(
+                            "Package install finished in %.1fs exit=%s", _inst_dt, exit_code
+                        )
                         execution_logs.append(install_stdout)
                         if install_stderr:
                             execution_logs.append(f"\n[STDERR]\n{install_stderr}")
@@ -285,12 +352,15 @@ class BaseExecutor(ABC):
                     else:
                         execution_logs.append("\n[PACKAGE INSTALLATION]")
                         execution_logs.append(
-                            "All requested packages already present in container image; nothing to install"
+                            f"{_elapsed_s(start_time)} STATUS: All requested packages already "
+                            "present in image; skipping install command"
                         )
                         execution_logs.append("-" * 60)
                 else:
                     execution_logs.append("\n[PACKAGE INSTALLATION]")
-                    execution_logs.append("No packages to install")
+                    execution_logs.append(
+                        f"{_elapsed_s(start_time)} STATUS: No packages requested for install"
+                    )
                     execution_logs.append("-" * 60)
 
             # Execute script
@@ -298,8 +368,14 @@ class BaseExecutor(ABC):
             logger.info(f"Executing script: {exec_cmd}")
             execution_logs.append("\n[SCRIPT EXECUTION]")
             execution_logs.append(f"Command: {exec_cmd}")
+            to_msg = f"{timeout}s" if timeout > 0 else "unlimited"
+            execution_logs.append(
+                f"{_elapsed_s(start_time)} STATUS: Running script (timeout={to_msg}); "
+                "stdout/stderr appear below when the process exits"
+            )
             execution_logs.append("-" * 60)
 
+            _script_t = time.time()
             if timeout > 0:
                 exit_code, stdout, stderr = await asyncio.wait_for(
                     self.container_manager.exec_command(container, exec_cmd),
@@ -309,6 +385,7 @@ class BaseExecutor(ABC):
                 exit_code, stdout, stderr = await self.container_manager.exec_command(
                     container, exec_cmd
                 )
+            _script_dt = time.time() - _script_t
 
             script_stdout = stdout.decode("utf-8", errors="replace")
             script_stderr = stderr.decode("utf-8", errors="replace")
@@ -316,7 +393,11 @@ class BaseExecutor(ABC):
             execution_logs.append(script_stdout)
             if script_stderr:
                 execution_logs.append(f"\n[STDERR]\n{script_stderr}")
+            execution_logs.append(
+                f"{_elapsed_s(start_time)} STATUS: Script finished ({_script_dt:.1f}s, exit {exit_code})"
+            )
             execution_logs.append(f"\n[EXIT CODE: {exit_code}]")
+            logger.info("Script finished in %.1fs exit=%s", _script_dt, exit_code)
             execution_logs.append("=" * 60)
 
             # Scan workspace directory for output files and copy them to /output
@@ -369,8 +450,16 @@ for f in copied_files:
                 script_bytes = scan_and_copy_script.encode("utf-8")
                 script_b64 = base64.b64encode(script_bytes).decode("ascii")
                 scan_cmd = f"python3 -c \"import base64; exec(base64.b64decode('{script_b64}').decode('utf-8'))\""
+                execution_logs.append(
+                    f"\n{_elapsed_s(start_time)} STATUS: Scanning /workspace and copying to /output"
+                )
+                _scan_t = time.time()
                 scan_exit_code, scan_stdout, scan_stderr = (
                     await self.container_manager.exec_command(container, scan_cmd)
+                )
+                execution_logs.append(
+                    f"{_elapsed_s(start_time)} STATUS: Workspace scan finished "
+                    f"({time.time() - _scan_t:.2f}s, exit {scan_exit_code})"
                 )
 
                 execution_logs.append("\n[WORKSPACE SCAN & COPY]")
@@ -426,6 +515,15 @@ for f in copied_files:
                     )
             except Exception as e:
                 logger.warning(f"Failed to scan/copy workspace files: {e}")
+
+            _wall = time.time() - start_time
+            execution_logs.append(
+                f"\n{_elapsed_s(start_time)} STATUS: Execution complete "
+                f"(total wall {_wall:.1f}s, script exit {exit_code})"
+            )
+            logger.info(
+                "Execution complete wall=%.1fs script_exit=%s", _wall, exit_code
+            )
 
             # Combine all logs
             container_logs = "\n".join(execution_logs)

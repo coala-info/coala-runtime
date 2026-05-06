@@ -42,13 +42,16 @@ Use **one** of `script` (code string) or `script_file` (host path to script). Pr
 - **script** (optional): Script source as string. Omit if using `script_file`.
 - **script_file** (optional): Absolute or relative path to script on host. Omit if using `script`.
 - **packages** (optional): Extra packages to install before running. See language-specific rules below.
+- **docker_image** (optional): Docker image to use instead of the default Coala image (Python or R, depending on the tool). Example: `"python:3.12-slim"`, `"rocker/tidyverse:latest"`, or a Biocontainers tag. When set, list all extra packages you need unless they are already in that image.
+- **skip_package_install** (optional): When `true`, no install step runs (`packages` ignored for install). Use with images that already include dependencies.
 - **input_files** (optional): Map **container path → host path** for bind-mounting. Example: `{"/input/data.csv": "/path/on/host/data.csv"}`. Scripts read from the container path (e.g. `/input/data.csv`).
 - **timeout** (optional): Seconds (default 300, max 3600, 0 = no limit).
 
 ## Python: `coala_python_executor`
 
 - **Pre-installed:** numpy, pandas, matplotlib (do not reinstall).
-- **packages:** List of names; version specifiers allowed, e.g. `["scikit-learn", "requests>=2.31.0"]`. Installed with `uv pip install --system`.
+- **packages:** List of names; version specifiers allowed, e.g. `["scikit-learn", "requests>=2.31.0"]`. Installed with `uv pip install --system` on the default image; on a custom **docker_image**, installs use `pip` unless `skip_package_install` is true.
+- **conda_packages** (optional): Conda-only specs (e.g. `["samtools"]`); requires conda/mamba in **docker_image** when used.
 - **Execution:** Script runs in container as `python /workspace/script.py`; working directory is `/workspace`.
 
 Example (conceptual):
@@ -65,7 +68,7 @@ Example (conceptual):
 ## R: `coala_r_executor`
 
 - **Pre-installed:** tidyverse (do not reinstall).
-- **packages:** CRAN packages as names; Bioconductor as `"bioc::PackageName"`, e.g. `["ggplot2", "dplyr", "bioc::Biobase", "bioc::limma"]`.
+- **packages:** CRAN packages as names; Bioconductor as `"bioc::PackageName"`, e.g. `["ggplot2", "dplyr", "bioc::Biobase", "bioc::limma"]`. On a custom **docker_image**, list everything you need unless `skip_package_install` is true.
 - **Execution:** Script runs as `Rscript /workspace/script.R`; working directory is `/workspace`.
 
 Example (conceptual):

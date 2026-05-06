@@ -55,11 +55,11 @@ class PythonExecutorInput(BaseModel):
         default_factory=list,
         description=(
             "Additional Python packages to install before running the script. "
-            "On the default Coala image, installs use uv; on a custom `container` image, `python -m pip install` is used. "
+            "On the default Coala image, installs use uv; on a custom `docker_image`, `python -m pip install` is used. "
             "For conda-only / non-Python dependencies, use the `conda_packages` field or prefix `conda::` "
             "(e.g. `conda::samtools`); those install via conda/mamba before pip. "
             "On the default Coala image, numpy/pandas/matplotlib are assumed pre-installed and omitted from pip installs; "
-            "with a custom `container`, nothing is assumed—list every pip package you need. "
+            "with a custom `docker_image`, nothing is assumed—list every pip package you need. "
             "On custom images, packages already installed in the container (via ``pip show``) are skipped automatically. "
             "Examples: ['scikit-learn', 'seaborn', 'requests>=2.31.0']"
         ),
@@ -82,7 +82,7 @@ class PythonExecutorInput(BaseModel):
         ge=0,
         le=3600,
     )
-    container: Optional[str] = Field(
+    docker_image: Optional[str] = Field(
         default=None,
         description=(
             "Docker image to run the script in (e.g. 'python:3.12-slim', 'my-registry/my-image:tag'). "
@@ -95,7 +95,7 @@ class PythonExecutorInput(BaseModel):
         default=False,
         description=(
             "When True, skip package installation entirely; `packages` is ignored for install. "
-            "Typical with a custom `container` image that already includes dependencies."
+            "Typical with a custom `docker_image` that already includes dependencies."
         ),
     )
 
@@ -107,14 +107,14 @@ class PythonExecutorInput(BaseModel):
             raise ValueError("Script cannot be empty or whitespace only")
         return v.strip() if v else None
 
-    @field_validator("container")
+    @field_validator("docker_image")
     @classmethod
-    def validate_container_python(cls, v: Optional[str]) -> Optional[str]:
+    def validate_docker_image_python(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
         s = v.strip()
         if not s:
-            raise ValueError("container cannot be empty or whitespace only")
+            raise ValueError("docker_image cannot be empty or whitespace only")
         return s
 
     @field_validator("conda_packages")
@@ -161,7 +161,7 @@ class RExecutorInput(BaseModel):
         default_factory=list,
         description=(
             "Additional R packages to install. Use 'bioc::package_name' for Bioconductor. "
-            "On the default Coala image, tidyverse is assumed pre-installed; with a custom `container`, list all CRAN/Bioc packages to install. "
+            "On the default Coala image, tidyverse is assumed pre-installed; with a custom `docker_image`, list all CRAN/Bioc packages to install. "
             "On custom images, packages whose R namespaces already exist are skipped automatically. "
             "Examples: ['ggplot2', 'dplyr', 'bioc::Biobase', 'bioc::limma']"
         ),
@@ -176,7 +176,7 @@ class RExecutorInput(BaseModel):
         ge=0,
         le=3600,
     )
-    container: Optional[str] = Field(
+    docker_image: Optional[str] = Field(
         default=None,
         description=(
             "Docker image to run the script in (e.g. 'rocker/tidyverse:latest', 'my-registry/my-r-image:tag'). "
@@ -188,7 +188,7 @@ class RExecutorInput(BaseModel):
         default=False,
         description=(
             "When True, skip package installation entirely; `packages` is ignored for install. "
-            "Typical with a custom `container` image that already includes dependencies."
+            "Typical with a custom `docker_image` that already includes dependencies."
         ),
     )
 
@@ -200,14 +200,14 @@ class RExecutorInput(BaseModel):
             raise ValueError("Script cannot be empty or whitespace only")
         return v.strip() if v else None
 
-    @field_validator("container")
+    @field_validator("docker_image")
     @classmethod
-    def validate_container_r(cls, v: Optional[str]) -> Optional[str]:
+    def validate_docker_image_r(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
         s = v.strip()
         if not s:
-            raise ValueError("container cannot be empty or whitespace only")
+            raise ValueError("docker_image cannot be empty or whitespace only")
         return s
 
     @model_validator(mode="after")
@@ -321,11 +321,11 @@ async def coala_python_executor(
     """Execute Python scripts in a containerized environment with dynamic package installs.
 
     This tool executes Python scripts in isolated Docker containers with support for:
-    - Dynamic package installation: uv on the default Coala image, pip on custom `container` images
+    - Dynamic package installation: uv on the default Coala image, pip on a custom `docker_image`
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
-    - Default Coala image assumes numpy, pandas, matplotlib are pre-installed; custom `container` does not
-    - Custom `container` images: probes the running container and skips pip packages already installed
+    - Default Coala image assumes numpy, pandas, matplotlib are pre-installed; custom `docker_image` does not
+    - Custom `docker_image`: probes the running container and skips pip packages already installed
 
     Args:
         params (PythonExecutorInput): Validated input parameters containing:
@@ -333,8 +333,8 @@ async def coala_python_executor(
               If script parameter fails due to encoding/serialization issues, use script_file instead.
             - script_file (str): Path to Python script file to execute (either script or script_file must be provided).
               Prefer using script_file when possible, especially if script parameter fails.
-            - packages (Optional[List[str]]): Packages to install (uv on default image, pip on custom `container`).
-              On the default image numpy/pandas/matplotlib are skipped for install; on custom `container`, list all pip deps.
+            - packages (Optional[List[str]]): Packages to install (uv on default image, pip on custom `docker_image`).
+              On the default image numpy/pandas/matplotlib are skipped for install; on custom `docker_image`, list all pip deps.
               Can include version specifiers (e.g., 'requests>=2.31.0').
               Use `conda::spec` for conda-only / non-Python deps (installed before pip).
             - conda_packages (Optional[List[str]]): Conda specs installed before pip/uv (requires conda or mamba in the image).
@@ -342,9 +342,9 @@ async def coala_python_executor(
               for bind-mounting files into the container.
             - timeout (int): Execution timeout in seconds (0 = no timeout, default: 300,
               max: 3600)
-            - container (Optional[str]): Docker image to use instead of the default Coala Python image.
+            - docker_image (Optional[str]): Docker image to use instead of the default Coala Python image.
             - skip_package_install (bool): When True, skip package installation (`packages` ignored for install);
-              typical for custom `container` images with dependencies pre-installed.
+              typical for custom `docker_image` values with dependencies pre-installed.
 
     Returns:
         ExecutionResultOutput: Structured result containing:
@@ -455,7 +455,7 @@ async def coala_python_executor(
             timeout = params.timeout
 
             executor = PythonExecutor(
-                image=params.container,
+                image=params.docker_image,
                 conda_packages=conda_packages,
             )
             logger.info(
@@ -523,8 +523,8 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
     - Dynamic package installation from CRAN (via r2u) and Bioconductor (via BiocManager)
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
-    - Default Coala image includes tidyverse (assumed pre-installed for install planning); custom `container` does not
-    - Custom `container` images: probes R namespaces and skips packages already installed
+    - Default Coala image includes tidyverse (assumed pre-installed for install planning); custom `docker_image` does not
+    - Custom `docker_image`: probes R namespaces and skips packages already installed
 
     Args:
         params (RExecutorInput): Validated input parameters containing:
@@ -533,16 +533,16 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
             - script_file (str): Path to R script file to execute (either script or script_file must be provided).
               Prefer using script_file when possible, especially if script parameter fails.
             - packages (Optional[List[str]]): R packages to install (CRAN + bioc:: for Bioconductor).
-              On the default image tidyverse is assumed pre-installed; on a custom `container`, list everything you need.
+              On the default image tidyverse is assumed pre-installed; on a custom `docker_image`, list everything you need.
               Examples: ['ggplot2', 'dplyr', 'bioc::Biobase', 'bioc::limma']
             - input_files (Optional[Dict[str, str]]): Map of container paths to host paths
               for bind-mounting files into the container.
             - timeout (int): Execution timeout in seconds (0 = no timeout, default: 300,
               max: 3600)
-            - container (Optional[str]): Docker image reference to use instead of the default
+            - docker_image (Optional[str]): Docker image reference to use instead of the default
               Coala R image (must provide `Rscript`).
             - skip_package_install (bool): When True, skip package installation (`packages` ignored for install);
-              typical for custom `container` images with dependencies pre-installed.
+              typical for custom `docker_image` values with dependencies pre-installed.
 
     Returns:
         ExecutionResultOutput: Structured result containing:
@@ -636,7 +636,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
             input_files = params.input_files or {}
             timeout = params.timeout
 
-            executor = RExecutor(image=params.container)
+            executor = RExecutor(image=params.docker_image)
             logger.info(
                 f"Executing R script from file: {script_file_path} "
                 f"(image: {executor.image}, packages: {packages}, "

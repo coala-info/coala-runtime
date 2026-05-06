@@ -6,31 +6,31 @@ from pydantic import ValidationError
 from coala_runtime.server import PythonExecutorInput, RExecutorInput
 
 
-def test_python_executor_input_container_stripped():
-    m = PythonExecutorInput(script="print(1)", container="  python:3.12-slim  ")
-    assert m.container == "python:3.12-slim"
+def test_python_executor_input_docker_image_stripped():
+    m = PythonExecutorInput(script="print(1)", docker_image="  python:3.12-slim  ")
+    assert m.docker_image == "python:3.12-slim"
 
 
-def test_python_executor_input_container_none_ok():
+def test_python_executor_input_docker_image_none_ok():
     m = PythonExecutorInput(script="print(1)")
-    assert m.container is None
+    assert m.docker_image is None
 
 
-def test_python_executor_input_container_empty_rejected():
+def test_python_executor_input_docker_image_empty_rejected():
     with pytest.raises(ValidationError):
-        PythonExecutorInput(script="print(1)", container="")
+        PythonExecutorInput(script="print(1)", docker_image="")
     with pytest.raises(ValidationError):
-        PythonExecutorInput(script="print(1)", container="   ")
+        PythonExecutorInput(script="print(1)", docker_image="   ")
 
 
-def test_r_executor_input_container_stripped():
-    m = RExecutorInput(script="print(1)", container="  rocker/r-ver:4.4  ")
-    assert m.container == "rocker/r-ver:4.4"
+def test_r_executor_input_docker_image_stripped():
+    m = RExecutorInput(script="print(1)", docker_image="  rocker/r-ver:4.4  ")
+    assert m.docker_image == "rocker/r-ver:4.4"
 
 
-def test_r_executor_input_container_empty_rejected():
+def test_r_executor_input_docker_image_empty_rejected():
     with pytest.raises(ValidationError):
-        RExecutorInput(script="x<-1", container="")
+        RExecutorInput(script="x<-1", docker_image="")
 
 
 def test_skip_package_install_defaults_false():
@@ -43,7 +43,7 @@ def test_skip_package_install_defaults_false():
 def test_skip_package_install_true_accepted():
     py = PythonExecutorInput(
         script="print(1)",
-        container="python:3.12-slim",
+        docker_image="python:3.12-slim",
         skip_package_install=True,
     )
     assert py.skip_package_install is True

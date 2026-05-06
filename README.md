@@ -82,8 +82,11 @@ See [MCP_CONFIG.md](MCP_CONFIG.md) for detailed configuration instructions for v
 Executes Python scripts in a containerized environment with uv package management.
 
 **Input:**
-- `script` (required): Python script code to execute
+- `script` or `script_file` (one required): Inline Python code or host path to a `.py` file
 - `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, matplotlib. Can include version specifiers (e.g., 'requests>=2.31.0')
+- `conda_packages` (optional, Python only): Conda specs installed before pip/uv (requires conda/mamba in the image)
+- `docker_image` (optional): Docker image to run instead of the default Coala Python image (e.g. `python:3.12-slim`, `quay.io/biocontainers/...`)
+- `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
 
@@ -102,8 +105,10 @@ Executes Python scripts in a containerized environment with uv package managemen
 Executes R scripts in a containerized environment with r2u and BiocManager.
 
 **Input:**
-- `script` (required): R script code to execute
+- `script` or `script_file` (one required): Inline R code or host path to an `.R` file
 - `packages` (optional): Additional R packages to install. Use 'bioc::package_name' format for Bioconductor packages. The image already includes tidyverse. Examples: ['ggplot2', 'dplyr', 'bioc::Biobase']
+- `docker_image` (optional): Docker image to run instead of the default Coala R image (must provide `Rscript` on `PATH`)
+- `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
 
