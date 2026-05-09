@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from coala_runtime.runtime.container_manager import ContainerManager
+from coala_runtime.runtime.engine import make_container_manager
 from coala_runtime.runtime.file_handler import FileHandler
 from coala_runtime.utils.output_parser import OutputParser
 
@@ -76,18 +76,18 @@ class BaseExecutor(ABC):
     def __init__(
         self,
         image: str,
-        container_manager: Optional[ContainerManager] = None,
+        container_manager: Optional[Any] = None,
         output_dir: Optional[str] = None,
     ):
         """Initialize executor.
 
         Args:
-            image: Docker image to use
-            container_manager: Optional container manager instance
+            image: OCI / Docker-format image to use
+            container_manager: Optional backend from ``make_container_manager()`` or a custom instance
             output_dir: Output directory path (host path)
         """
         self.image = image
-        self.container_manager = container_manager or ContainerManager()
+        self.container_manager = container_manager or make_container_manager()
         self.output_dir = output_dir or tempfile.mkdtemp(prefix="coala_output_")
         FileHandler.ensure_output_dir(self.output_dir)
 
@@ -240,8 +240,8 @@ class BaseExecutor(ABC):
             execution_logs.append(f"Bind mounts ({len(volumes)}):")
             execution_logs.extend(mount_lines)
             execution_logs.append(
-                "Note: Docker collects each exec step's stdout/stderr only when that step finishes "
-                "(no live streaming). Long installs or scripts may pause here until they complete."
+                "Note: The container backend collects each exec step's stdout/stderr when that step "
+                "finishes (no live streaming). Long installs or scripts may pause here until they complete."
             )
             logger.info(
                 "Runtime job: image=%s mounts=%d timeout=%ss output=%s",

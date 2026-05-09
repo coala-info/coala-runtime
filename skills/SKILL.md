@@ -5,12 +5,12 @@ description: How to run Python and R scripts via the Coala Runtime MCP server. U
 
 # Coala Runtime – Python and R Script Execution
 
-This skill describes how to use the Coala Runtime MCP server to execute Python and R scripts in isolated Docker containers.
+This skill describes how to use the Coala Runtime MCP server to execute Python and R scripts in isolated containers (**Docker** by default; **Podman** or **Singularity/Apptainer** via `COALA_CONTAINER_ENGINE` — see `MCP_CONFIG.md`).
 
 ## Prerequisites
 
 - **Coala Runtime** MCP server configured and running (see project `MCP_CONFIG.md`).
-- **Docker** installed and running. Images are pulled from Docker Hub by default (`hubentu/coala-runtime-python:latest`, `hubentu/coala-runtime-r:latest`) or built locally with `coala-runtime --build` or `./docker/build.sh`.
+- **Container runtime**: Docker (default), Podman (Docker-compatible API), or Singularity/Apptainer. Images default to Docker Hub (`hubentu/coala-runtime-python:latest`, `hubentu/coala-runtime-r:latest`) or build locally with `coala-runtime --build` / `./docker/build.sh` (Docker/Podman only).
 
 ## Configuring the MCP server
 
@@ -105,8 +105,8 @@ Example (conceptual):
 
 ## Error handling
 
-- **Docker errors:** Ensure Docker is running (`docker ps`).
-- **Image missing:** Build images with `coala-runtime --build` or `./docker/build.sh`.
+- **Docker / Podman / Singularity errors:** Docker/Podman: ensure the engine is running (`docker ps` / Podman socket). Singularity/Apptainer: ensure the CLI is installed and can pull `docker://` images.
+- **Image missing:** Build/pull executor images — `./docker/build.sh` or Docker Hub pulls with Docker/Podman; Singularity/Apptainer pulls on first run (`docker://...`).
 - **Missing package:** Add the required package(s) to the `packages` parameter (e.g. `ModuleNotFoundError` in Python or "there is no package called 'X'" in R).
 - **Timeout:** Increase `timeout` or simplify the script.
 - **Script/encoding issues:** Prefer `script_file` with a path to a saved script instead of passing long or complex `script` strings.

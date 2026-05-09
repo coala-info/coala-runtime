@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 authors = [{ name = "Qiang" }]
 requires-python = ">=3.11"
-keywords = ["mcp", "docker", "python", "r", "containers"]
+keywords = ["mcp", "docker", "podman", "singularity", "apptainer", "python", "r", "containers"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

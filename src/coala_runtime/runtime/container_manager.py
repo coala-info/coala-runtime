@@ -1,4 +1,4 @@
-"""Container manager for Docker operations."""
+"""Container manager using docker-py (Docker Engine or Podman's Docker-compatible API)."""
 
 import asyncio
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class ContainerManager:
-    """Manages Docker container lifecycle and operations."""
+    """Manages container lifecycle via docker-py (Docker or Podman socket)."""
 
     def __init__(self, docker_client: Optional[docker.DockerClient] = None):
         """Initialize container manager.

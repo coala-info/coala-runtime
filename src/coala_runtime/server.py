@@ -1,7 +1,8 @@
 """MCP server for Coala Runtime.
 
 This server provides tools to execute Python and R scripts in containerized
-Docker environments with support for dynamic package installation and file mounting.
+environments (Docker, Podman, or Singularity/Apptainer) with support for
+dynamic package installation and file mounting.
 """
 
 import ast
@@ -260,9 +261,16 @@ def _handle_execution_error(e: Exception, operation: str) -> ExecutionResultOutp
     """
     error_msg = str(e)
     error_type = type(e).__name__
+    lower_msg = error_msg.lower()
 
     # Provide actionable error messages based on error type
-    if "Docker" in error_type or "docker" in error_msg.lower():
+    if "singularity" in lower_msg or "apptainer" in lower_msg:
+        stderr_msg = (
+            f"Error: Singularity/Apptainer failed during {operation}. "
+            "Ensure the CLI is on PATH, can pull OCI images (docker://...), and bind-mount host paths. "
+            "See MCP_CONFIG.md (COALA_CONTAINER_ENGINE)."
+        )
+    elif "Docker" in error_type or "docker" in lower_msg:
         stderr_msg = (
             f"Error: Docker operation failed during {operation}. "
             "Please ensure Docker is running and accessible. "
@@ -273,17 +281,17 @@ def _handle_execution_error(e: Exception, operation: str) -> ExecutionResultOutp
             f"Error: {operation} timed out. "
             "Consider increasing the timeout parameter or optimizing your script for faster execution."
         )
-    elif "image" in error_msg.lower() or "Image" in error_type:
+    elif "image" in lower_msg or "Image" in error_type:
         stderr_msg = (
-            f"Error: Docker image problem during {operation}. "
-            "Missing images are pulled automatically before create; if this still fails, "
-            "verify the tag on the registry, network access, and registry login if the image is private. "
+            f"Error: Container image problem during {operation}. "
+            "Missing images are pulled automatically before create (Docker/Podman); Singularity/Apptainer pull on first start. "
+            "Verify the tag, network access, and registry login if the image is private. "
             "For default Coala images, use './docker/build.sh' or pull hubentu/coala-runtime-*."
         )
     elif "permission" in error_msg.lower() or "Permission" in error_type:
         stderr_msg = (
             f"Error: Permission denied during {operation}. "
-            "Please check file permissions and Docker socket access."
+            "Please check file permissions and container socket access (Docker/Podman)."
         )
     else:
         stderr_msg = f"Error during {operation}: {error_msg}"

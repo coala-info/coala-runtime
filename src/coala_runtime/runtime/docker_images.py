@@ -4,8 +4,13 @@ import logging
 import subprocess
 from pathlib import Path
 
-import docker
 from docker.errors import DockerException, ImageNotFound
+
+from coala_runtime.runtime.engine import (
+    ContainerEngine,
+    docker_client_for_engine,
+    get_engine_from_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +96,35 @@ def ensure_images(*, build: bool = False) -> None:
     """Ensure required executor images exist.
 
     By default, pulls hubentu/coala-runtime-python:latest and hubentu/coala-runtime-r:latest
-    from Docker Hub if not present. With build=True, runs docker/build.sh to build both
-    images locally (tagged as coala-runtime-python:latest and coala-runtime-r:latest).
+    from Docker Hub if not present (Docker or Podman via docker-py).
+
+    With build=True, runs docker/build.sh to build both images locally (Docker/Podman only).
+
+    Singularity/Apptainer engines fetch images on first container start; proactive pull is skipped.
     """
+    engine = get_engine_from_env()
+    if engine in (ContainerEngine.SINGULARITY, ContainerEngine.APPTAINER):
+        if build:
+            logger.warning(
+                "COALA_CONTAINER_ENGINE=%s: ./docker/build.sh requires Docker or Podman; "
+                "skipping --build. Use registry images or build SIFs separately.",
+                engine.value,
+            )
+        else:
+            logger.debug(
+                "Engine %s: default images %s resolve on first execution.",
+                engine.value,
+                PULL_IMAGES,
+            )
+        return
+
     try:
-        client = docker.from_env()
-    except DockerException as e:
+        client = docker_client_for_engine(engine)
+    except (DockerException, RuntimeError, OSError) as e:
         logger.warning(
-            "Could not connect to Docker; skipping image check/build: %s", e
+            "Could not connect to container API (%s); skipping image check/build: %s",
+            engine.value,
+            e,
         )
         return
 
@@ -114,7 +140,7 @@ def ensure_images(*, build: bool = False) -> None:
 
     for image in PULL_IMAGES:
         if _image_exists(client, image):
-            logger.debug("Docker image %s already present", image)
+            logger.debug("Container image %s already present", image)
             continue
         try:
             _pull_image(client, image)
