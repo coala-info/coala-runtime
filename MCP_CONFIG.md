@@ -4,9 +4,11 @@ This document explains how to configure the Coala Runtime MCP server in various 
 
 ## Prerequisites
 
-1. **Container runtime**: Docker (default), **Podman** (Docker-compatible API), or **Singularity / Apptainer** for `docker://` images.
+1. **Container runtime**: **Docker**, **Podman** (Docker-compatible API), or **Singularity / Apptainer** for `docker://` images.
 
-   Select at startup with environment variable or CLI flag:
+   If you **do not** set `COALA_CONTAINER_ENGINE` or `--engine`, the server **auto-detects**: it uses Docker when the daemon responds, otherwise Podman if its socket is available, otherwise **Apptainer** or **Singularity** if that CLI is on `PATH` (common on **HPC** clusters that only ship Apptainer).
+
+   To force a runtime, set at startup:
 
    ```bash
    export COALA_CONTAINER_ENGINE=podman      # or docker | singularity | apptainer
@@ -169,6 +171,21 @@ Ensure the container API is reachable (`docker ps`, or Podman's Docker-compatibl
 ### Singularity / Apptainer
 
 Use `COALA_CONTAINER_ENGINE=singularity` or `apptainer`. The CLI must be on `PATH`. Images pull or cache on first execution (`docker://` URIs).
+
+#### Docker Hub: `unauthorized` / `invalid username/password` when pulling
+
+Public images do not need a login. Apptainer often fails this way if **stale Docker credentials** are present (e.g. old token in `~/.docker/config.json` for `https://index.docker.io/v1/`), or **`SINGULARITY_DOCKER_USERNAME` / `APPTAINER_DOCKER_*`** set incorrectly.
+
+- Remove or fix docker.io auth in `~/.docker/config.json`, or run `docker logout` / `apptainer registry logout docker.io`.
+- **Workaround:** pull once where pulls work, then point Coala at the file:
+
+  ```bash
+  apptainer pull "$HOME/containers/coala-python.sif" docker://hubentu/coala-runtime-python:latest
+  ```
+
+  Pass **`docker_image`** as the absolute path to that `.sif` (do not use `docker://` for local files).
+
+Coala leaves absolute paths and `./` / `../` image strings unchanged for Singularity (no forced `docker://` prefix).
 
 ### Docker not found (remote Docker hosts only)
 

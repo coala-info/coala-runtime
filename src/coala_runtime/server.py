@@ -86,7 +86,9 @@ class PythonExecutorInput(BaseModel):
     docker_image: Optional[str] = Field(
         default=None,
         description=(
-            "Docker image to run the script in (e.g. 'python:3.12-slim', 'my-registry/my-image:tag'). "
+            "Container image: Docker-style ref (e.g. 'python:3.12-slim', 'my-registry/my-image:tag'). "
+            "With Singularity/Apptainer, you may pass an absolute path to a pre-pulled .sif file instead "
+            "(avoids Docker Hub auth issues). "
             "When omitted, the default Coala Python image is used. "
             "The image should provide `python` on PATH. "
             "Extra packages use `uv pip install` only on the default image; custom images use `python -m pip install` (unless `skip_package_install` is true)."
@@ -180,7 +182,8 @@ class RExecutorInput(BaseModel):
     docker_image: Optional[str] = Field(
         default=None,
         description=(
-            "Docker image to run the script in (e.g. 'rocker/tidyverse:latest', 'my-registry/my-r-image:tag'). "
+            "Container image: Docker-style ref (e.g. 'rocker/tidyverse:latest', 'my-registry/my-r-image:tag'). "
+            "With Singularity/Apptainer, you may pass an absolute path to a pre-pulled .sif file. "
             "When omitted, the default Coala R image is used. "
             "The image should provide `Rscript` on PATH; package installs follow the same rules as the default image when you request extra packages."
         ),
@@ -264,11 +267,34 @@ def _handle_execution_error(e: Exception, operation: str) -> ExecutionResultOutp
     lower_msg = error_msg.lower()
 
     # Provide actionable error messages based on error type
-    if "singularity" in lower_msg or "apptainer" in lower_msg:
+    if (
+        any(
+            x in lower_msg
+            for x in (
+                "auth token",
+                "unauthorized",
+                "incorrect username",
+                "invalid username",
+                "invalid username/password",
+            )
+        )
+        and ("docker://" in lower_msg or "docker.io" in lower_msg or "registry" in lower_msg)
+    ):
+        stderr_msg = (
+            f"Error: Docker registry rejected credentials while pulling the image ({operation}). "
+            "Public Hub images do not require login — stale ~/.docker/config.json or "
+            "SINGULARITY_DOCKER_* / APPTAINER_DOCKER_* env vars often cause this. "
+            "Try: remove docker.io from auths in ~/.docker/config.json, "
+            "`docker logout`, or `apptainer registry logout docker.io`. "
+            "Or pull once to a file: `apptainer pull /path/coala-python.sif docker://hubentu/coala-runtime-python:latest` "
+            "and pass that absolute path as `docker_image` (no docker:// prefix). "
+            "See MCP_CONFIG.md (Singularity troubleshooting)."
+        )
+    elif "singularity" in lower_msg or "apptainer" in lower_msg:
         stderr_msg = (
             f"Error: Singularity/Apptainer failed during {operation}. "
-            "Ensure the CLI is on PATH, can pull OCI images (docker://...), and bind-mount host paths. "
-            "See MCP_CONFIG.md (COALA_CONTAINER_ENGINE)."
+            "Ensure the CLI is on PATH, can pull OCI images (docker://...) or use a local .sif path, "
+            "and bind-mount host paths. See MCP_CONFIG.md (COALA_CONTAINER_ENGINE)."
         )
     elif "Docker" in error_type or "docker" in lower_msg:
         stderr_msg = (

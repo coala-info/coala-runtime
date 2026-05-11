@@ -19,7 +19,9 @@ Run the Coala Runtime MCP server over stdio (tools: coala_python_executor, coala
                    skipped for singularity/apptainer — see MCP_CONFIG.md)
 
   --engine NAME    Container runtime: overrides COALA_CONTAINER_ENGINE for this process.
-                   docker (default), podman, singularity, apptainer.
+                   If neither is set, the server auto-detects (Docker if the daemon works,
+                   else Podman, else Apptainer/Singularity on PATH — typical on HPC).
+                   Explicit values: docker | podman | singularity | apptainer.
                    Same effect as: export COALA_CONTAINER_ENGINE=NAME
 
 Configure an MCP client (e.g. Cursor ~/.cursor/mcp.json), replace cwd with your repo path:
@@ -43,7 +45,7 @@ More options: MCP_CONFIG.md in the coala-runtime repository.
 # Shown on every start (stderr only; stdout is reserved for MCP JSON-RPC).
 _MCP_START_HINT = """\
 Coala Runtime MCP (stdio). Client config: use "command": "coala-runtime", "args": [], "cwd": "<repo>".
-Optional: --engine docker|podman|singularity|apptainer (or COALA_CONTAINER_ENGINE). Details: MCP_CONFIG.md.
+Optional: --engine or COALA_CONTAINER_ENGINE; if unset, Docker/Podman/Apptainer are auto-detected. Details: MCP_CONFIG.md.
 """
 
 
