@@ -3,6 +3,12 @@
 from coala_runtime.tools.python_executor import PythonExecutor
 
 
+class _SingularityLikeManager:
+    """Minimal stub: Singularity/Apptainer marks system site-packages read-only."""
+
+    system_site_packages_writable = False
+
+
 def test_default_image_uses_uv_for_packages():
     ex = PythonExecutor()
     cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["seaborn"])
@@ -88,3 +94,33 @@ def test_default_image_still_prepends_defaults_for_compose():
     merged = ex.compose_install_package_list(["seaborn"])
     assert set(ex.DEFAULT_PACKAGES).issubset(set(merged))
     assert "seaborn" in merged
+
+
+def test_singularity_like_uses_prefix_instead_of_system_uv():
+    ex = PythonExecutor(container_manager=_SingularityLikeManager())
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["requests"])
+    assert "uv pip install" in cmd
+    assert '--prefix "$COALA_PIP_PREFIX"' in cmd or "--prefix \"$COALA_PIP_PREFIX\"" in cmd
+    assert "--system" not in cmd
+    assert "requests" in cmd
+    assert "UV_CACHE_DIR=" in cmd
+    assert "/output/.coala-runtime" in cmd
+
+
+def test_singularity_like_execution_sets_pythonpath():
+    ex = PythonExecutor(container_manager=_SingularityLikeManager())
+    cmd = ex.get_execution_command("/workspace/script.py")
+    assert "PYTHONPATH=" in cmd
+    assert "/output/.coala-runtime/pythonpath" in cmd
+    assert "python /workspace/script.py" in cmd
+
+
+def test_singularity_like_custom_image_uses_pip_prefix():
+    ex = PythonExecutor(
+        image="quay.io/biocontainers/snapatac2:2.9.0--py312h91a5aaa_0",
+        container_manager=_SingularityLikeManager(),
+    )
+    cmd = ex.get_install_command(["seaborn"])
+    assert "python -m pip install" in cmd
+    assert '--prefix "$COALA_PIP_PREFIX"' in cmd
+    assert "seaborn" in cmd

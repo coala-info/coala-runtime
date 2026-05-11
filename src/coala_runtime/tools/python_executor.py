@@ -1,5 +1,6 @@
 """Python executor tool implementation."""
 
+import base64
 import json
 import logging
 import shlex
@@ -8,6 +9,19 @@ from typing import Any, List, Optional, Tuple
 from coala_runtime.runtime.executor_base import BaseExecutor
 
 logger = logging.getLogger(__name__)
+
+# Singularity/Apptainer: image root is read-only. Use /output/.coala-runtime (host-backed mount):
+# /tmp is often a tiny tmpfs with ``instance start --writable-tmpfs`` → uv wheel extract hits ENOSPC.
+# Also avoid ~/.cache — home is often missing or read-only in batch jobs.
+_SINGULARITY_RUNTIME_ROOT = "/output/.coala-runtime"
+_SINGULARITY_PIP_PREFIX = f"{_SINGULARITY_RUNTIME_ROOT}/pip-prefix"
+_SINGULARITY_PYTHONPATH_FILE = f"{_SINGULARITY_RUNTIME_ROOT}/pythonpath"
+_WRITE_COALA_PYTHONPATH_B64 = base64.b64encode(
+    b"import sys\nfrom pathlib import Path\n"
+    b'root = Path("/output/.coala-runtime/pip-prefix")\n'
+    b"sp = root / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'\n"
+    b'Path("/output/.coala-runtime/pythonpath").write_text(str(sp))\n'
+).decode("ascii")
 
 
 class PythonExecutor(BaseExecutor):
@@ -22,6 +36,7 @@ class PythonExecutor(BaseExecutor):
         image: Optional[str] = None,
         output_dir: Optional[str] = None,
         conda_packages: Optional[List[str]] = None,
+        container_manager: Optional[Any] = None,
     ):
         """Initialize Python executor.
 
@@ -29,8 +44,13 @@ class PythonExecutor(BaseExecutor):
             image: Docker image to use (default: hubentu/coala-runtime-python:latest)
             output_dir: Output directory path
             conda_packages: Conda package specs (non-Python / conda-only deps), installed before pip/uv
+            container_manager: Optional backend from ``make_container_manager()`` (tests may inject a stub)
         """
-        super().__init__(image or self.DEFAULT_IMAGE, output_dir=output_dir)
+        super().__init__(
+            image or self.DEFAULT_IMAGE,
+            output_dir=output_dir,
+            container_manager=container_manager,
+        )
         self.conda_packages: List[str] = []
         if conda_packages:
             for p in conda_packages:
@@ -53,6 +73,24 @@ class PythonExecutor(BaseExecutor):
     def _install_uses_uv(self) -> bool:
         """Coala default image ships ``uv``; custom images typically only have pip."""
         return self._uses_default_coala_image()
+
+    def _use_workspace_pip_prefix(self) -> bool:
+        """Singularity/Apptainer: read-only system site; install to a writable prefix + PYTHONPATH."""
+        return not getattr(self.container_manager, "system_site_packages_writable", True)
+
+    def _singularity_pip_install_prologue(self) -> str:
+        """Shell fragment: writable prefix, uv/pip caches on host-backed /output, path file for PYTHONPATH."""
+        q = shlex.quote(_SINGULARITY_PIP_PREFIX)
+        root = shlex.quote(_SINGULARITY_RUNTIME_ROOT)
+        return (
+            f"COALA_PIP_PREFIX={q} && "
+            f"mkdir -p {root}/uv-cache {root}/pip-cache {root}/xdg-cache {root}/tmp \"$COALA_PIP_PREFIX\" && "
+            f"export UV_CACHE_DIR={root}/uv-cache "
+            f"PIP_CACHE_DIR={root}/pip-cache "
+            f"XDG_CACHE_HOME={root}/xdg-cache "
+            f"TMPDIR={root}/tmp && "
+            f'python -c "import base64; exec(base64.b64decode(\'{_WRITE_COALA_PYTHONPATH_B64}\').decode())" && '
+        )
 
     @staticmethod
     def _split_pip_and_conda_specs(packages: List[str]) -> Tuple[List[str], List[str]]:
@@ -161,13 +199,23 @@ class PythonExecutor(BaseExecutor):
 
         if packages_to_install:
             package_list = " ".join(shlex.quote(p) for p in packages_to_install)
+            prefix = self._singularity_pip_install_prologue() if self._use_workspace_pip_prefix() else ""
             if self._install_uses_uv():
-                pip_cmd = f"uv pip install --system {package_list}"
+                if self._use_workspace_pip_prefix():
+                    pip_cmd = f"{prefix}uv pip install --prefix \"$COALA_PIP_PREFIX\" {package_list}"
+                else:
+                    pip_cmd = f"uv pip install --system {package_list}"
             else:
-                pip_cmd = (
-                    "python -m pip install --no-cache-dir --root-user-action=ignore "
-                    f"{package_list}"
-                )
+                if self._use_workspace_pip_prefix():
+                    pip_cmd = (
+                        f"{prefix}python -m pip install --no-cache-dir --root-user-action=ignore "
+                        f'--prefix "$COALA_PIP_PREFIX" {package_list}'
+                    )
+                else:
+                    pip_cmd = (
+                        "python -m pip install --no-cache-dir --root-user-action=ignore "
+                        f"{package_list}"
+                    )
         else:
             pip_cmd = ""
 
@@ -188,7 +236,15 @@ class PythonExecutor(BaseExecutor):
         Returns:
             Execution command
         """
-        return f"python {script_path}"
+        base = f"python {script_path}"
+        if self._use_workspace_pip_prefix():
+            pyf = shlex.quote(_SINGULARITY_PYTHONPATH_FILE)
+            return (
+                f'export PYTHONPATH="$(cat {pyf} 2>/dev/null)"'
+                + '"${PYTHONPATH:+:$PYTHONPATH}"; '
+                + base
+            )
+        return base
 
     def get_default_packages(self) -> List[str]:
         """Get default packages.

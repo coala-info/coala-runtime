@@ -62,6 +62,9 @@ class SingularityInstanceContainer:
 class SingularityContainerManager:
     """Manages Singularity/Apptainer instance lifecycle (OCI ``docker://`` URIs)."""
 
+    #: Instance overlays keep the image root read-only; installs must use ``--prefix`` under a writable path.
+    system_site_packages_writable: bool = False
+
     def __init__(self, cli_binary: str = "singularity") -> None:
         exe = shutil.which(cli_binary)
         if not exe:
@@ -142,8 +145,9 @@ class SingularityContainerManager:
     ) -> tuple[int, bytes, bytes]:
         inst_url = f"instance://{container.id}"
         argv = [self.cli, "exec"]
-        if workdir:
-            argv.extend(["--pwd", workdir])
+        # Default pwd avoids Apptainer trying the host cwd (often missing inside the instance).
+        pwd = workdir or "/output"
+        argv.extend(["--pwd", pwd])
         argv.append(inst_url)
 
         env = os.environ.copy()

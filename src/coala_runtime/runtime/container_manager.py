@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 class ContainerManager:
     """Manages container lifecycle via docker-py (Docker or Podman socket)."""
 
+    #: Image runs with a writable root; ``uv pip install --system`` can target system site-packages.
+    system_site_packages_writable: bool = True
+
     def __init__(self, docker_client: Optional[docker.DockerClient] = None):
         """Initialize container manager.
 
