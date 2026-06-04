@@ -13,7 +13,7 @@ _SINGULARITY_R_LIB = "/output/.coala-runtime/R/library"
 
 
 class RExecutor(BaseExecutor):
-    """Executor for R scripts using r2u and BiocManager."""
+    """Executor for R scripts using Bioconductor Docker (CRAN + BiocManager installs)."""
 
     DEFAULT_IMAGE = "hubentu/coala-runtime-r:latest"
     # Pre-installed in the default image; skip installing when user requests them
@@ -114,13 +114,32 @@ class RExecutor(BaseExecutor):
                 pruned.append(item)
         return pruned
 
+    @staticmethod
+    def _r_package_names(packages: List[str]) -> List[str]:
+        """Map install specs to R package names (``bioc::Pkg`` → ``Pkg``)."""
+        return [p[6:] if p.startswith("bioc::") else p for p in packages]
+
+    def _packages_for_biocmanager_install(self, packages: List[str]) -> List[str]:
+        """Package names to pass to ``BiocManager::install`` (deduped, defaults skipped)."""
+        names = self._r_package_names(packages)
+        if self._uses_default_coala_image():
+            default_set = set(self.DEFAULT_PACKAGES)
+            names = [n for n in names if n not in default_set]
+        return list(dict.fromkeys(names))
+
+    @staticmethod
+    def _biocmanager_install_expr(package_names: List[str]) -> str:
+        """R expression: BiocManager install (preferred binaries on Bioconductor Docker)."""
+        pkg_list = ", ".join(f"'{pkg}'" for pkg in package_names)
+        return f"BiocManager::install(c({pkg_list}), ask = FALSE, update = FALSE)"
+
     def get_install_command(self, packages: List[str]) -> str:
         """Get R package installation command.
 
         Args:
             packages: List of package names
-                     - Regular packages: installed via install.packages()
-                     - Bioconductor: format 'bioc::package_name'
+                     - CRAN: plain names (e.g. ``ggplot2``)
+                     - Bioconductor: ``bioc::package_name`` (optional; same installer)
 
         Returns:
             Installation command as R script
@@ -128,44 +147,11 @@ class RExecutor(BaseExecutor):
         if not packages:
             return "echo 'No packages to install'"
 
-        # Separate CRAN and Bioconductor packages
-        cran_packages = []
-        bioc_packages = []
-
-        for pkg in packages:
-            if pkg.startswith("bioc::"):
-                bioc_packages.append(pkg[6:])  # Remove 'bioc::' prefix
-            else:
-                cran_packages.append(pkg)
-
-        # Build R installation script
-        r_script_parts = []
-
-        # Install CRAN packages (skip tidyverse only on default Coala image)
-        if cran_packages:
-            if self._uses_default_coala_image():
-                packages_to_install = [
-                    pkg for pkg in cran_packages if pkg not in self.DEFAULT_PACKAGES
-                ]
-            else:
-                packages_to_install = list(cran_packages)
-            if packages_to_install:
-                # Use single quotes for package names in R
-                pkg_list = ", ".join([f"'{pkg}'" for pkg in packages_to_install])
-                r_script_parts.append(
-                    f"install.packages(c({pkg_list}), repos='https://cloud.r-project.org')"
-                )
-
-        # Install Bioconductor packages
-        if bioc_packages:
-            pkg_list = ", ".join([f"'{pkg}'" for pkg in bioc_packages])
-            r_script_parts.append(f"BiocManager::install(c({pkg_list}))")
-
-        if not r_script_parts:
+        packages_to_install = self._packages_for_biocmanager_install(packages)
+        if not packages_to_install:
             return "echo 'No additional packages to install'"
 
-        # Combine into single R command
-        r_command = "; ".join(r_script_parts)
+        r_command = self._biocmanager_install_expr(packages_to_install)
         if self._use_writable_r_library():
             lib_esc = _SINGULARITY_R_LIB.replace("\\", "\\\\").replace("'", "\\'")
             r_command = (

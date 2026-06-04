@@ -24,10 +24,16 @@ docker build -f docker/Dockerfile.python -t coala-runtime-python:latest .
 
 #### R Executor Image
 
-Build the R image with r2u, bioc2u, and tidyverse:
+Build the R image on [bioconductor/bioconductor_docker](https://hub.docker.com/r/bioconductor/bioconductor_docker/tags) (default tag `RELEASE_3_23`):
 
 ```bash
 docker build -f docker/Dockerfile.r -t coala-runtime-r:latest .
+```
+
+Other Bioconductor releases:
+
+```bash
+docker build --build-arg BIOC_DOCKER_TAG=RELEASE_3_22 -f docker/Dockerfile.r -t coala-runtime-r:3.22 .
 ```
 
 ## Image Details
@@ -41,14 +47,10 @@ docker build -f docker/Dockerfile.r -t coala-runtime-r:latest .
 
 ### R Image (`coala-runtime-r`)
 
-- **Base**: `rocker/r2u:latest` (provides CRAN packages as Ubuntu binaries)
-- **Package Managers**: 
-  - `apt` via r2u for CRAN packages
-  - `BiocManager` for Bioconductor packages
-  - `bioc2u` repository for Bioconductor binaries
-- **Default Package**: tidyverse
+- **Base**: `bioconductor/bioconductor_docker:RELEASE_3_23` (R 4.6.x, Bioconductor 3.23; override with `BIOC_DOCKER_TAG`)
+- **Package Manager**: `BiocManager::install()` for CRAN and Bioconductor packages at runtime (binary installs)
+- **Default Package**: tidyverse (installed in Dockerfile)
 - **Directories**: `/workspace`, `/input`, `/output`
-- **Configuration**: bspm enabled for automatic apt integration
 
 ## Usage
 
@@ -62,5 +64,5 @@ These images are automatically used by the Coala Runtime MCP server when executi
 ## Notes
 
 - The Python image uses `uv pip install --system` to install packages system-wide
-- The R image uses `bspm` to automatically route `install.packages()` calls to `apt` when binaries are available
+- The R image uses the Bioconductor project's Docker stack; extra packages install via R at runtime
 - Both images are optimized for containerized script execution with minimal overhead

@@ -7,7 +7,7 @@ An MCP (Model Context Protocol) server for executing Python and R scripts in con
 - **Containerized Execution**: Run Python and R scripts in isolated containers (Docker, Podman, or Singularity/Apptainer — see `COALA_CONTAINER_ENGINE` in [MCP_CONFIG.md](MCP_CONFIG.md))
 - **Dynamic Package Installation**: 
   - Python: Uses `uv` for fast package installation
-  - R: Uses `r2u` and `BiocManager` for CRAN and Bioconductor packages
+  - R: Based on `bioconductor/bioconductor_docker` (BiocManager for CRAN and Bioconductor packages)
 - **File Mounting**: Bind-mount local files and directories into containers
 - **Pre-installed packages**: Python image includes numpy, pandas, matplotlib; R image includes tidyverse
 - **MCP Integration**: Exposes `coala_python_executor` and `coala_r_executor` tools for LLM interaction
@@ -102,7 +102,7 @@ Executes Python scripts in a containerized environment with uv package managemen
 
 #### `coala_r_executor`
 
-Executes R scripts in a containerized environment with r2u and BiocManager.
+Executes R scripts in a containerized environment with Bioconductor Docker (BiocManager for extra packages).
 
 **Input:**
 - `script` or `script_file` (one required): Inline R code or host path to an `.R` file

@@ -1,6 +1,6 @@
 [project]
 name = "coala-runtime"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for executing Python and R scripts in containerized environments"
 readme = "README.md"
 license = "MIT"

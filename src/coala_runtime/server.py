@@ -182,7 +182,7 @@ class RExecutorInput(BaseModel):
     docker_image: Optional[str] = Field(
         default=None,
         description=(
-            "Container image: Docker-style ref (e.g. 'rocker/tidyverse:latest', 'my-registry/my-r-image:tag'). "
+            "Container image: Docker-style ref (e.g. 'bioconductor/bioconductor_docker:RELEASE_3_23', 'my-registry/my-r-image:tag'). "
             "With Singularity/Apptainer, you may pass an absolute path to a pre-pulled .sif file. "
             "When omitted, the default Coala R image is used. "
             "The image should provide `Rscript` on PATH; package installs follow the same rules as the default image when you request extra packages."
@@ -551,10 +551,10 @@ async def coala_python_executor(
     },
 )
 async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> ExecutionResultOutput:
-    """Execute R scripts in a containerized environment with r2u and BiocManager.
+    """Execute R scripts in a containerized environment with Bioconductor Docker.
 
     This tool executes R scripts in isolated Docker containers with support for:
-    - Dynamic package installation from CRAN (via r2u) and Bioconductor (via BiocManager)
+    - Dynamic package installation from CRAN and Bioconductor (via BiocManager)
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
     - Default Coala image includes tidyverse (assumed pre-installed for install planning); custom `docker_image` does not
