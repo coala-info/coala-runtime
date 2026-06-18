@@ -13,7 +13,7 @@ from coala_runtime.runtime.engine import (
 
 def test_singularity_image_uri_adds_docker_scheme():
     assert singularity_image_uri("ubuntu:22.04") == "docker://ubuntu:22.04"
-    assert singularity_image_uri("hubentu/coala-runtime-python:latest") == (
+    assert singularity_image_uri("coala-runtime-python:latest") == (
         "docker://hubentu/coala-runtime-python:latest"
     )
 

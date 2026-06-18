@@ -27,7 +27,7 @@ _WRITE_COALA_PYTHONPATH_B64 = base64.b64encode(
 class PythonExecutor(BaseExecutor):
     """Executor for Python scripts; default Coala image uses uv for installs."""
 
-    DEFAULT_IMAGE = "hubentu/coala-runtime-python:latest"
+    DEFAULT_IMAGE = "coala-runtime-python:latest"
     # Pre-installed in the default image; skip installing when user requests them
     DEFAULT_PACKAGES: List[str] = ["numpy", "pandas", "matplotlib"]
 
@@ -41,7 +41,7 @@ class PythonExecutor(BaseExecutor):
         """Initialize Python executor.
 
         Args:
-            image: Docker image to use (default: hubentu/coala-runtime-python:latest)
+            image: Docker image to use (default: coala-runtime-python:latest)
             output_dir: Output directory path
             conda_packages: Conda package specs (non-Python / conda-only deps), installed before pip/uv
             container_manager: Optional backend from ``make_container_manager()`` (tests may inject a stub)

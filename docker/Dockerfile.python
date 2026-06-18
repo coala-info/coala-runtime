@@ -1,4 +1,4 @@
-# Python executor image with uv and default packages
+# Python executor image with uv and default packages (multi-arch: amd64 + arm64 via python:3.12-slim)
 FROM python:3.12-slim
 
 # Set environment variables
@@ -6,14 +6,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies and uv
+# Install system dependencies and uv (astral.sh installer supports linux/arm64)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
+    ca-certificates \
     build-essential \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/uv \
-    && mv /root/.local/bin/uvx /usr/local/bin/uvx || true \
+    && mv /root/.local/bin/uvx /usr/local/bin/uvx 2>/dev/null || true \
     && chmod +x /usr/local/bin/uv \
     && apt-get remove -y curl \
     && apt-get autoremove -y \
@@ -27,7 +28,7 @@ RUN mkdir -p /workspace /input /output
 WORKDIR /workspace
 
 # Install default Python packages using uv
-RUN uv pip install --system numpy pandas matplotlib
+RUN uv pip install --system numpy pandas scipy matplotlib
 
 # Default command (can be overridden)
 CMD ["python"]

@@ -6,16 +6,25 @@ from coala_runtime.__main__ import parse_coala_runtime_argv
 
 
 def test_parse_only_prog():
-    build, engine, rest = parse_coala_runtime_argv(["coala-runtime"])
-    assert build is False
+    force_build, pull, engine, rest = parse_coala_runtime_argv(["coala-runtime"])
+    assert force_build is False
+    assert pull is False
     assert engine is None
     assert rest == ["coala-runtime"]
 
 
 def test_parse_build():
-    build, engine, rest = parse_coala_runtime_argv(["coala-runtime", "--build"])
-    assert build is True
+    force_build, pull, engine, rest = parse_coala_runtime_argv(["coala-runtime", "--build"])
+    assert force_build is True
+    assert pull is False
     assert engine is None
+    assert rest == ["coala-runtime"]
+
+
+def test_parse_pull():
+    force_build, pull, engine, rest = parse_coala_runtime_argv(["coala-runtime", "--pull"])
+    assert force_build is False
+    assert pull is True
     assert rest == ["coala-runtime"]
 
 
@@ -24,23 +33,34 @@ def test_parse_build():
     ["docker", "podman", "singularity", "apptainer"],
 )
 def test_parse_engine(name):
-    build, engine, rest = parse_coala_runtime_argv(["coala-runtime", "--engine", name])
-    assert build is False
+    force_build, pull, engine, rest = parse_coala_runtime_argv(["coala-runtime", "--engine", name])
+    assert force_build is False
+    assert pull is False
     assert engine == name
     assert rest == ["coala-runtime"]
 
 
+def test_parse_build_and_pull():
+    force_build, pull, engine, rest = parse_coala_runtime_argv(
+        ["coala-runtime", "--build", "--pull"]
+    )
+    assert force_build is True
+    assert pull is True
+    assert rest == ["coala-runtime"]
+
+
 def test_parse_build_and_engine():
-    build, engine, rest = parse_coala_runtime_argv(
+    force_build, pull, engine, rest = parse_coala_runtime_argv(
         ["coala-runtime", "--build", "--engine", "podman"]
     )
-    assert build is True
+    assert force_build is True
+    assert pull is False
     assert engine == "podman"
     assert rest == ["coala-runtime"]
 
 
 def test_parse_strips_flags_preserves_unknown():
-    build, engine, rest = parse_coala_runtime_argv(
+    force_build, pull, engine, rest = parse_coala_runtime_argv(
         ["coala-runtime", "--engine", "docker", "extra"]
     )
     assert engine == "docker"

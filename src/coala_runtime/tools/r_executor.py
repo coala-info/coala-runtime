@@ -15,7 +15,7 @@ _SINGULARITY_R_LIB = "/output/.coala-runtime/R/library"
 class RExecutor(BaseExecutor):
     """Executor for R scripts using Bioconductor Docker (CRAN + BiocManager installs)."""
 
-    DEFAULT_IMAGE = "hubentu/coala-runtime-r:latest"
+    DEFAULT_IMAGE = "coala-runtime-r:latest"
     # Pre-installed in the default image; skip installing when user requests them
     DEFAULT_PACKAGES: List[str] = ["tidyverse"]
 
@@ -28,7 +28,7 @@ class RExecutor(BaseExecutor):
         """Initialize R executor.
 
         Args:
-            image: Docker image to use (default: hubentu/coala-runtime-r:latest)
+            image: Docker image to use (default: coala-runtime-r:latest)
             output_dir: Output directory path
             container_manager: Optional backend from ``make_container_manager()`` (tests may inject a stub)
         """

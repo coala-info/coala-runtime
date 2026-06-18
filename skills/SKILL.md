@@ -10,11 +10,11 @@ This skill describes how to use the Coala Runtime MCP server to execute Python a
 ## Prerequisites
 
 - **Coala Runtime** MCP server configured and running (see project `MCP_CONFIG.md`).
-- **Container runtime**: Docker (default), Podman (Docker-compatible API), or Singularity/Apptainer. Images default to Docker Hub (`hubentu/coala-runtime-python:latest`, `hubentu/coala-runtime-r:latest`) or build locally with `coala-runtime --build` / `./docker/build.sh` (Docker/Podman only).
+- **Container runtime**: Docker (default), Podman (Docker-compatible API), or Singularity/Apptainer. Default local tags: `coala-runtime-python:latest`, `coala-runtime-r:latest` (build with `coala-runtime build` / `./docker/build.sh`, or `--pull` from Docker Hub).
 
 ## Configuring the MCP server
 
-Install from project root: `uv pip install -e .` and `./docker/build.sh`. Add to your MCP config (e.g. Cursor: `~/.cursor/mcp.json`):
+Install from project root: `uv pip install -e .` and `coala-runtime build`. Add to your MCP config (e.g. Cursor: `~/.cursor/mcp.json`):
 
 ```json
 "mcpServers": {
@@ -106,7 +106,7 @@ Example (conceptual):
 ## Error handling
 
 - **Docker / Podman / Singularity errors:** Docker/Podman: ensure the engine is running (`docker ps` / Podman socket). Singularity/Apptainer: ensure the CLI is installed and can pull `docker://` images.
-- **Image missing:** Build/pull executor images — `./docker/build.sh` or Docker Hub pulls with Docker/Podman; Singularity/Apptainer pulls on first run (`docker://...`).
+- **Image missing:** On Docker/Podman start, missing images are built locally. Use `coala-runtime --pull` to fetch from Docker Hub (`hubentu/coala-runtime-*`, retagged locally). Singularity/Apptainer pulls on first run.
 - **Missing package:** Add the required package(s) to the `packages` parameter (e.g. `ModuleNotFoundError` in Python or "there is no package called 'X'" in R).
 - **Timeout:** Increase `timeout` or simplify the script.
 - **Script/encoding issues:** Prefer `script_file` with a path to a saved script instead of passing long or complex `script` strings.

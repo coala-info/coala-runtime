@@ -30,28 +30,25 @@ pip install -e .
 
 ## Docker Images
 
-By default, the server **pulls** the executor images from Docker Hub if they are not present locally:
+Executor images (used by the MCP tools):
 
-- `hubentu/coala-runtime-python:latest` → tagged as `coala-runtime-python:latest`
-- `hubentu/coala-runtime-r:latest` → tagged as `coala-runtime-r:latest`
+- `coala-runtime-python:latest`
+- `coala-runtime-r:latest`
 
-To **build** the images locally instead (e.g. for development or custom Dockerfiles), run with `--build` or build manually:
+**On MCP server start (Docker/Podman):** if either image is missing locally, `coala-runtime` **builds** them from this repo (`docker/build.sh`). Set MCP `cwd` to the clone so the Dockerfiles are found.
 
 ```bash
-coala-runtime --build
-# or
-python -m coala_runtime --build
+coala-runtime          # build missing images, then start MCP server
+coala-runtime --pull   # pull hubentu/* from Docker Hub, retag as coala-runtime-*:latest
+coala-runtime --build  # force rebuild, then start
+coala-runtime build    # build only (no MCP server)
 ```
 
-Manual build (same as `--build`):
+Manual build (same tags as above):
 
 ```bash
 ./docker/build.sh
 ```
-
-This creates:
-- `coala-runtime-python:latest` - Python executor image
-- `coala-runtime-r:latest` - R executor image
 
 ## Usage
 
@@ -69,7 +66,7 @@ Or with the module runner:
 python -m coala_runtime
 ```
 
-Use `coala-runtime --build` (or `python -m coala_runtime --build`) to build Docker images locally before starting.
+Use `coala-runtime build` to build images without starting the server; use `--pull` on start to fetch from Docker Hub instead of building.
 
 ### Configuration
 

@@ -35,7 +35,10 @@ def singularity_image_uri(image: str) -> str:
         return s
     if s.startswith("./") or s.startswith("../"):
         return s
-    return f"docker://{s}"
+    from coala_runtime.runtime.docker_images import REGISTRY_PULL_IMAGES
+
+    ref = REGISTRY_PULL_IMAGES.get(s, s)
+    return f"docker://{ref}"
 
 
 def _autodetect_container_engine() -> ContainerEngine:

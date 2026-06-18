@@ -312,7 +312,7 @@ def _handle_execution_error(e: Exception, operation: str) -> ExecutionResultOutp
             f"Error: Container image problem during {operation}. "
             "Missing images are pulled automatically before create (Docker/Podman); Singularity/Apptainer pull on first start. "
             "Verify the tag, network access, and registry login if the image is private. "
-            "For default Coala images, use './docker/build.sh' or pull hubentu/coala-runtime-*."
+            "For default Coala images, run `coala-runtime` (builds locally if missing), `coala-runtime build`, or `coala-runtime --pull` (Docker Hub → coala-runtime-*:latest)."
         )
     elif "permission" in error_msg.lower() or "Permission" in error_type:
         stderr_msg = (

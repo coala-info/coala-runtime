@@ -1,4 +1,4 @@
-"""Ensure required Docker images exist; pull from registry or build locally."""
+"""Ensure required Docker images exist; build locally or pull from registry."""
 
 import logging
 import subprocess
@@ -14,11 +14,20 @@ from coala_runtime.runtime.engine import (
 
 logger = logging.getLogger(__name__)
 
-# Default images used by executors; pulled if missing
-PULL_IMAGES = [
-    "hubentu/coala-runtime-python:latest",
-    "hubentu/coala-runtime-r:latest",
+# Local tags used by executors and produced by ``docker/build.sh``.
+EXECUTOR_IMAGES = [
+    "coala-runtime-python:latest",
+    "coala-runtime-r:latest",
 ]
+
+# Docker Hub sources for ``coala-runtime --pull`` (retagged to EXECUTOR_IMAGES locally).
+REGISTRY_PULL_IMAGES = {
+    "coala-runtime-python:latest": "hubentu/coala-runtime-python:latest",
+    "coala-runtime-r:latest": "hubentu/coala-runtime-r:latest",
+}
+
+# Backwards-compatible alias
+PULL_IMAGES = list(REGISTRY_PULL_IMAGES.values())
 
 
 def _project_root() -> Path | None:
@@ -49,34 +58,21 @@ def _image_exists(client, image_tag: str) -> bool:
         return False
 
 
-def _pull_image(client, image: str) -> None:
-    """Pull image from registry."""
-    logger.info("Pulling %s...", image)
-    client.images.pull(image)
-    logger.info("Pulled %s", image)
+def _executor_images_present(client) -> bool:
+    return all(_image_exists(client, tag) for tag in EXECUTOR_IMAGES)
 
 
-def _build_image(client, project_root: Path, dockerfile_rel: str, tag: str) -> None:
-    """Build a single image. dockerfile_rel is relative to project_root."""
-    logger.info("Building Docker image %s from %s...", tag, dockerfile_rel)
-    build_path = str(project_root)
-    try:
-        image, gen = client.images.build(
-            path=build_path,
-            dockerfile=dockerfile_rel,
-            tag=tag,
-        )
-        for chunk in gen:
-            if "stream" in chunk:
-                logger.debug(chunk["stream"].rstrip())
-    except ImageNotFound:
-        # docker-py may raise after build when resolving image by ID; image can
-        # still be present by tag (e.g. with buildx or some Docker versions).
-        try:
-            client.images.get(tag)
-        except ImageNotFound:
-            raise
-    logger.info("Built image %s", tag)
+def _pull_image(client, local_tag: str) -> None:
+    """Pull from Docker Hub and tag locally (drops ``hubentu/`` namespace)."""
+    registry_tag = REGISTRY_PULL_IMAGES.get(local_tag, local_tag)
+    logger.info("Pulling %s from %s...", local_tag, registry_tag)
+    client.images.pull(registry_tag)
+    if registry_tag != local_tag:
+        repo, tag = local_tag.rsplit(":", 1) if ":" in local_tag else (local_tag, "latest")
+        client.api.tag(registry_tag, repo, tag=tag)
+        logger.info("Tagged %s as %s", registry_tag, local_tag)
+    else:
+        logger.info("Pulled %s", local_tag)
 
 
 def _run_build_script(project_root: Path) -> None:
@@ -92,29 +88,43 @@ def _run_build_script(project_root: Path) -> None:
     )
 
 
-def ensure_images(*, build: bool = False) -> None:
-    """Ensure required executor images exist.
+def build_executor_images() -> None:
+    """Build executor images via ``docker/build.sh``.
 
-    By default, pulls hubentu/coala-runtime-python:latest and hubentu/coala-runtime-r:latest
-    from Docker Hub if not present (Docker or Podman via docker-py).
+    Requires the coala-runtime repo (``docker/Dockerfile.python``) and Docker/Podman CLI.
+    Honors ``COALA_DOCKER_*`` env vars documented in ``docker/README.md``.
+    """
+    project_root = _project_root()
+    if project_root is None:
+        raise FileNotFoundError(
+            "Could not find coala-runtime project root (missing docker/Dockerfile.python). "
+            "Run from the repository directory or use an MCP client cwd that points at the clone."
+        )
+    _run_build_script(project_root)
 
-    With build=True, runs docker/build.sh to build both images locally (Docker/Podman only).
 
-    Singularity/Apptainer engines fetch images on first container start; proactive pull is skipped.
+def ensure_images(*, pull: bool = False, force_build: bool = False) -> None:
+    """Ensure executor images exist before starting the MCP server.
+
+    Default (Docker/Podman): build locally via ``docker/build.sh`` when either image is
+    missing. Use ``pull=True`` (``coala-runtime --pull``) to fetch from Docker Hub instead.
+    Use ``force_build=True`` (``coala-runtime --build``) to rebuild even when images exist.
+
+    Singularity/Apptainer: images resolve on first execution; this function is a no-op.
     """
     engine = get_engine_from_env()
     if engine in (ContainerEngine.SINGULARITY, ContainerEngine.APPTAINER):
-        if build:
+        if force_build or pull:
             logger.warning(
-                "COALA_CONTAINER_ENGINE=%s: ./docker/build.sh requires Docker or Podman; "
-                "skipping --build. Use registry images or build SIFs separately.",
+                "COALA_CONTAINER_ENGINE=%s: --build/--pull apply to Docker/Podman only; "
+                "use registry images or build SIFs separately.",
                 engine.value,
             )
         else:
             logger.debug(
-                "Engine %s: default images %s resolve on first execution.",
+                "Engine %s: executor images %s resolve on first execution.",
                 engine.value,
-                PULL_IMAGES,
+                EXECUTOR_IMAGES,
             )
         return
 
@@ -128,22 +138,35 @@ def ensure_images(*, build: bool = False) -> None:
         )
         return
 
-    if build:
-        project_root = _project_root()
-        if project_root is None or not project_root.joinpath("docker", "Dockerfile.python").exists():
-            logger.warning(
-                "Could not find project root (run from coala-runtime repo or set cwd); skipping Docker image build"
-            )
-            return
-        _run_build_script(project_root)
+    if pull and not force_build:
+        for image in EXECUTOR_IMAGES:
+            if _image_exists(client, image):
+                logger.debug("Container image %s already present", image)
+                continue
+            try:
+                _pull_image(client, image)
+            except DockerException as e:
+                logger.error("Failed to pull %s: %s", image, e)
+                raise
         return
 
-    for image in PULL_IMAGES:
-        if _image_exists(client, image):
-            logger.debug("Container image %s already present", image)
-            continue
+    if force_build or not _executor_images_present(client):
+        if force_build:
+            logger.info("Building executor images (--build)")
+        else:
+            logger.info(
+                "Executor image(s) missing locally; building via docker/build.sh "
+                "(use --pull to fetch pre-built images from Docker Hub instead)"
+            )
         try:
-            _pull_image(client, image)
-        except DockerException as e:
-            logger.error("Failed to pull %s: %s", image, e)
+            build_executor_images()
+        except FileNotFoundError as e:
+            logger.warning("%s", e)
+            if not _executor_images_present(client):
+                logger.warning(
+                    "Executor images still missing (%s); script execution may fail.",
+                    ", ".join(EXECUTOR_IMAGES),
+                )
+        except subprocess.CalledProcessError as e:
+            logger.error("Executor image build failed (exit %s)", e.returncode)
             raise

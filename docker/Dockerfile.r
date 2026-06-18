@@ -1,6 +1,7 @@
 # Coala R executor — Bioconductor official Docker image (R + Bioc preconfigured).
+# Base tag RELEASE_3_23 ships linux/amd64 and linux/arm64 (Apple Silicon).
 #
-# Default tag RELEASE_3_23 (R 4.6.x, Bioconductor 3.23). Override at build time, e.g.:
+# Override at build time, e.g.:
 #   docker build --build-arg BIOC_DOCKER_TAG=RELEASE_3_22 -f docker/Dockerfile.r .
 ARG BIOC_DOCKER_TAG=RELEASE_3_23
 FROM bioconductor/bioconductor_docker:${BIOC_DOCKER_TAG}
