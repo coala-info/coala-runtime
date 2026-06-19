@@ -45,13 +45,10 @@ ensure_buildx() {
 build_image() {
     local dockerfile=$1
     local tag=$2
-    shift 2
-    local -a extra_args=("$@")
 
     if [[ "$PLATFORMS" == *","* ]]; then
         ensure_buildx
         local -a bx=(buildx build --platform "$PLATFORMS" -f "$dockerfile" -t "$tag")
-        bx+=("${extra_args[@]}")
         if [[ "$PUSH" == "1" ]]; then
             bx+=(--push)
         else
@@ -63,7 +60,7 @@ build_image() {
         return
     fi
 
-    docker build --platform "$PLATFORMS" -f "$dockerfile" -t "$tag" "${extra_args[@]}" "$PROJECT_ROOT"
+    docker build --platform "$PLATFORMS" -f "$dockerfile" -t "$tag" "$PROJECT_ROOT"
 }
 
 echo -e "${BLUE}Building Coala Runtime Docker images...${NC}"
