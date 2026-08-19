@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional
 
+from coala_runtime.utils.output_parser import is_user_output_file
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,10 +68,9 @@ class FileHandler:
 
         files = []
         for item in output_path.rglob("*"):
-            if item.is_file():
-                # Return relative path from output_dir
-                rel_path = item.relative_to(output_path)
-                files.append(str(rel_path))
+            if not is_user_output_file(item, output_path):
+                continue
+            files.append(str(item.relative_to(output_path)))
 
         return sorted(files)
 

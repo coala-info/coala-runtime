@@ -14,7 +14,7 @@ from typing import Dict, Optional, Sequence, Union
 
 from docker.errors import DockerException
 
-from coala_runtime.runtime.engine import singularity_image_uri
+from coala_runtime.runtime.engine import merge_container_environment, singularity_image_uri
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +151,9 @@ class SingularityContainerManager:
         argv.append(inst_url)
 
         env = os.environ.copy()
-        if environment:
-            env.update({k: str(v) for k, v in environment.items()})
+        env.update(
+            {k: str(v) for k, v in merge_container_environment(environment).items()}
+        )
 
         if isinstance(command, str):
             argv.extend(["/bin/sh", "-lc", command])

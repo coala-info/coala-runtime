@@ -1,27 +1,34 @@
 """Python executor tool implementation."""
 
-import base64
 import json
 import logging
+import re
 import shlex
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from coala_runtime.runtime.executor_base import BaseExecutor
+from coala_runtime.runtime.executor_base import BaseExecutor, uses_default_coala_image
 
 logger = logging.getLogger(__name__)
 
-# Singularity/Apptainer: image root is read-only. Use /output/.coala-runtime (host-backed mount):
-# /tmp is often a tiny tmpfs with ``instance start --writable-tmpfs`` → uv wheel extract hits ENOSPC.
-# Also avoid ~/.cache — home is often missing or read-only in batch jobs.
+# Writable prefix when the image site-packages are not writable (Singularity, or
+# Docker/Podman running as the host uid). Cache dirs live on host-backed /output.
 _SINGULARITY_RUNTIME_ROOT = "/output/.coala-runtime"
 _SINGULARITY_PIP_PREFIX = f"{_SINGULARITY_RUNTIME_ROOT}/pip-prefix"
-_SINGULARITY_PYTHONPATH_FILE = f"{_SINGULARITY_RUNTIME_ROOT}/pythonpath"
-_WRITE_COALA_PYTHONPATH_B64 = base64.b64encode(
-    b"import sys\nfrom pathlib import Path\n"
-    b'root = Path("/output/.coala-runtime/pip-prefix")\n'
-    b"sp = root / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'\n"
-    b'Path("/output/.coala-runtime/pythonpath").write_text(str(sp))\n'
-).decode("ascii")
+_PYTHON_SITE_PACKAGES = [
+    f"{_SINGULARITY_PIP_PREFIX}/lib/python3.{minor}/site-packages"
+    for minor in range(10, 15)
+]
+
+# Import name → PyPI dist when they differ (agent often omits ``packages``).
+_IMPORT_TO_PIP = {
+    "bs4": "beautifulsoup4",
+    "sklearn": "scikit-learn",
+    "PIL": "pillow",
+    "cv2": "opencv-python-headless",
+    "yaml": "pyyaml",
+    "dateutil": "python-dateutil",
+}
+_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_][\w]*)", re.M)
 
 
 class PythonExecutor(BaseExecutor):
@@ -59,7 +66,7 @@ class PythonExecutor(BaseExecutor):
                     self.conda_packages.append(s)
 
     def _uses_default_coala_image(self) -> bool:
-        return self.image == self.DEFAULT_IMAGE
+        return uses_default_coala_image(self.image, self.DEFAULT_IMAGE)
 
     def compose_install_package_list(self, user_packages: List[str]) -> List[str]:
         """Custom images: only user-listed packages (no assumed numpy/pandas/matplotlib)."""
@@ -75,22 +82,49 @@ class PythonExecutor(BaseExecutor):
         return self._uses_default_coala_image()
 
     def _use_workspace_pip_prefix(self) -> bool:
-        """Singularity/Apptainer: read-only system site; install to a writable prefix + PYTHONPATH."""
+        """Install to /output when system site-packages are not writable."""
         return not getattr(self.container_manager, "system_site_packages_writable", True)
 
-    def _singularity_pip_install_prologue(self) -> str:
-        """Shell fragment: writable prefix, uv/pip caches on host-backed /output, path file for PYTHONPATH."""
-        q = shlex.quote(_SINGULARITY_PIP_PREFIX)
-        root = shlex.quote(_SINGULARITY_RUNTIME_ROOT)
-        return (
-            f"COALA_PIP_PREFIX={q} && "
-            f"mkdir -p {root}/uv-cache {root}/pip-cache {root}/xdg-cache {root}/tmp \"$COALA_PIP_PREFIX\" && "
-            f"export UV_CACHE_DIR={root}/uv-cache "
-            f"PIP_CACHE_DIR={root}/pip-cache "
-            f"XDG_CACHE_HOME={root}/xdg-cache "
-            f"TMPDIR={root}/tmp && "
-            f'python -c "import base64; exec(base64.b64decode(\'{_WRITE_COALA_PYTHONPATH_B64}\').decode())" && '
-        )
+    def exec_environment(self) -> Dict[str, str]:
+        if not self._use_workspace_pip_prefix():
+            return {}
+        root = _SINGULARITY_RUNTIME_ROOT
+        return {
+            "COALA_PIP_PREFIX": _SINGULARITY_PIP_PREFIX,
+            "UV_CACHE_DIR": f"{root}/uv-cache",
+            "PIP_CACHE_DIR": f"{root}/pip-cache",
+            "XDG_CACHE_HOME": f"{root}/xdg-cache",
+            "XDG_CONFIG_HOME": f"{root}/xdg-config",
+            "HOME": f"{root}/home",
+            "MPLCONFIGDIR": f"{root}/mplconfig",
+            "TMPDIR": f"{root}/tmp",
+            "PYTHONPATH": ":".join(_PYTHON_SITE_PACKAGES),
+        }
+
+    def prepare_runtime_dirs(self) -> list[str]:
+        if not self._use_workspace_pip_prefix():
+            return []
+        env = self.exec_environment()
+        return [
+            env["UV_CACHE_DIR"],
+            env["PIP_CACHE_DIR"],
+            env["XDG_CACHE_HOME"],
+            env["XDG_CONFIG_HOME"],
+            env["HOME"],
+            env["MPLCONFIGDIR"],
+            env["TMPDIR"],
+            _SINGULARITY_PIP_PREFIX,
+        ]
+
+    def packages_implied_by_script(self, script: str) -> List[str]:
+        found: List[str] = []
+        seen: set[str] = set()
+        for name in _IMPORT_RE.findall(script or ""):
+            pip_name = _IMPORT_TO_PIP.get(name)
+            if pip_name and pip_name not in seen:
+                seen.add(pip_name)
+                found.append(pip_name)
+        return found
 
     @staticmethod
     def _split_pip_and_conda_specs(packages: List[str]) -> Tuple[List[str], List[str]]:
@@ -135,7 +169,8 @@ class PythonExecutor(BaseExecutor):
         """Return pip distribution names that are not already installed (``pip show``)."""
         if not pip_names:
             return []
-        env = {"COALA_PIP_PROBE_JSON": json.dumps(pip_names)}
+        env = dict(self.exec_environment())
+        env["COALA_PIP_PROBE_JSON"] = json.dumps(pip_names)
         cmd = [
             "python",
             "-c",
@@ -159,9 +194,7 @@ class PythonExecutor(BaseExecutor):
     async def prune_install_list_for_container(
         self, container: Any, install_list: List[str]
     ) -> List[str]:
-        """Drop pip packages already present in a custom image (conda:: lines unchanged)."""
-        if self._uses_default_coala_image():
-            return list(install_list)
+        """Drop pip packages already present in the image (``pip show``)."""
         pip_like, _ = self._split_pip_and_conda_specs(install_list)
         if not pip_like:
             return list(install_list)
@@ -199,17 +232,17 @@ class PythonExecutor(BaseExecutor):
 
         if packages_to_install:
             package_list = " ".join(shlex.quote(p) for p in packages_to_install)
-            prefix = self._singularity_pip_install_prologue() if self._use_workspace_pip_prefix() else ""
+            prefix_arg = shlex.quote(_SINGULARITY_PIP_PREFIX)
             if self._install_uses_uv():
                 if self._use_workspace_pip_prefix():
-                    pip_cmd = f"{prefix}uv pip install --prefix \"$COALA_PIP_PREFIX\" {package_list}"
+                    pip_cmd = f"uv pip install --prefix {prefix_arg} {package_list}"
                 else:
                     pip_cmd = f"uv pip install --system {package_list}"
             else:
                 if self._use_workspace_pip_prefix():
                     pip_cmd = (
-                        f"{prefix}python -m pip install --no-cache-dir --root-user-action=ignore "
-                        f'--prefix "$COALA_PIP_PREFIX" {package_list}'
+                        "python -m pip install --no-cache-dir --root-user-action=ignore "
+                        f"--prefix {prefix_arg} {package_list}"
                     )
                 else:
                     pip_cmd = (
@@ -236,15 +269,7 @@ class PythonExecutor(BaseExecutor):
         Returns:
             Execution command
         """
-        base = f"python {script_path}"
-        if self._use_workspace_pip_prefix():
-            pyf = shlex.quote(_SINGULARITY_PYTHONPATH_FILE)
-            return (
-                f'export PYTHONPATH="$(cat {pyf} 2>/dev/null)"'
-                + '"${PYTHONPATH:+:$PYTHONPATH}"; '
-                + base
-            )
-        return base
+        return f"python {script_path}"
 
     def get_default_packages(self) -> List[str]:
         """Get default packages.

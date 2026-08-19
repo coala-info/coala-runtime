@@ -9,15 +9,24 @@ class _SingularityLikeManager:
     system_site_packages_writable = False
 
 
+class _RootLikeManager:
+    """Docker/Podman running as root — system site-packages are writable."""
+
+    system_site_packages_writable = True
+
+
 def test_default_image_uses_uv_for_packages():
-    ex = PythonExecutor()
+    ex = PythonExecutor(container_manager=_RootLikeManager())
     cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["seaborn"])
     assert "uv pip install --system" in cmd
     assert "seaborn" in cmd
 
 
 def test_custom_image_uses_pip_for_packages():
-    ex = PythonExecutor(image="quay.io/biocontainers/snapatac2:2.9.0--py312h91a5aaa_0")
+    ex = PythonExecutor(
+        image="quay.io/biocontainers/snapatac2:2.9.0--py312h91a5aaa_0",
+        container_manager=_RootLikeManager(),
+    )
     cmd = ex.get_install_command(["seaborn"])
     assert "python -m pip install" in cmd
     assert "seaborn" in cmd
@@ -28,6 +37,7 @@ def test_conda_packages_field_before_pip():
     ex = PythonExecutor(
         image="quay.io/foo/bar:latest",
         conda_packages=["samtools"],
+        container_manager=_RootLikeManager(),
     )
     cmd = ex.get_install_command(["seaborn"])
     assert "conda install" in cmd or "mamba install" in cmd
@@ -38,7 +48,10 @@ def test_conda_packages_field_before_pip():
 
 
 def test_conda_prefix_in_packages():
-    ex = PythonExecutor(image="quay.io/foo/bar:latest")
+    ex = PythonExecutor(
+        image="quay.io/foo/bar:latest",
+        container_manager=_RootLikeManager(),
+    )
     cmd = ex.get_install_command(["conda::samtools", "seaborn"])
     assert "samtools" in cmd
     assert "conda::" not in cmd
@@ -49,6 +62,7 @@ def test_conda_only_no_pip_extras():
     ex = PythonExecutor(
         image="quay.io/foo/bar:latest",
         conda_packages=["samtools"],
+        container_manager=_RootLikeManager(),
     )
     cmd = ex.get_install_command([])
     assert "conda install" in cmd or "mamba install" in cmd
@@ -100,19 +114,55 @@ def test_singularity_like_uses_prefix_instead_of_system_uv():
     ex = PythonExecutor(container_manager=_SingularityLikeManager())
     cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["requests"])
     assert "uv pip install" in cmd
-    assert '--prefix "$COALA_PIP_PREFIX"' in cmd or "--prefix \"$COALA_PIP_PREFIX\"" in cmd
+    assert "--prefix /output/.coala-runtime/pip-prefix" in cmd
     assert "--system" not in cmd
     assert "requests" in cmd
-    assert "UV_CACHE_DIR=" in cmd
-    assert "/output/.coala-runtime" in cmd
+    assert "export" not in cmd
+    assert "&&" not in cmd
+    env = ex.exec_environment()
+    assert env["UV_CACHE_DIR"] == "/output/.coala-runtime/uv-cache"
+    assert "/output/.coala-runtime/pip-prefix" in env["PYTHONPATH"]
+    assert env["MPLCONFIGDIR"] == "/output/.coala-runtime/mplconfig"
+    assert env["HOME"] == "/output/.coala-runtime/home"
+    assert env["XDG_CONFIG_HOME"] == "/output/.coala-runtime/xdg-config"
+    dirs = ex.prepare_runtime_dirs()
+    assert env["MPLCONFIGDIR"] in dirs
+    assert env["HOME"] in dirs
+
+
+def test_untagged_default_image_uses_uv_like_latest():
+    ex = PythonExecutor(
+        image="coala-runtime-python",
+        container_manager=_RootLikeManager(),
+    )
+    assert ex._uses_default_coala_image()
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["seaborn"])
+    assert "uv pip install --system" in cmd
+    assert "seaborn" in cmd
+
+
+def test_hub_default_image_is_still_default():
+    ex = PythonExecutor(image="hubentu/coala-runtime-python:latest")
+    assert ex._uses_default_coala_image()
+    assert ex.pip_packages_to_install(["numpy", "seaborn"]) == ["seaborn"]
+
+
+def test_packages_implied_by_script_maps_bs4():
+    ex = PythonExecutor()
+    assert ex.packages_implied_by_script("from bs4 import BeautifulSoup\n") == [
+        "beautifulsoup4"
+    ]
+    assert ex.packages_implied_by_script("import os\nimport json\n") == []
+    assert "scikit-learn" in ex.packages_implied_by_script("import sklearn\n")
 
 
 def test_singularity_like_execution_sets_pythonpath():
     ex = PythonExecutor(container_manager=_SingularityLikeManager())
     cmd = ex.get_execution_command("/workspace/script.py")
-    assert "PYTHONPATH=" in cmd
-    assert "/output/.coala-runtime/pythonpath" in cmd
-    assert "python /workspace/script.py" in cmd
+    assert cmd == "python /workspace/script.py"
+    assert "export" not in cmd
+    env = ex.exec_environment()
+    assert "python3.12/site-packages" in env["PYTHONPATH"]
 
 
 def test_singularity_like_custom_image_uses_pip_prefix():
@@ -122,5 +172,6 @@ def test_singularity_like_custom_image_uses_pip_prefix():
     )
     cmd = ex.get_install_command(["seaborn"])
     assert "python -m pip install" in cmd
-    assert '--prefix "$COALA_PIP_PREFIX"' in cmd
+    assert "--prefix /output/.coala-runtime/pip-prefix" in cmd
     assert "seaborn" in cmd
+    assert "export" not in cmd

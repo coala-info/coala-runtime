@@ -7,14 +7,13 @@ from typing import Dict, Optional, Sequence, Union
 import docker
 from docker.errors import DockerException, ImageNotFound
 
+from coala_runtime.runtime.engine import host_container_user, merge_container_environment
+
 logger = logging.getLogger(__name__)
 
 
 class ContainerManager:
     """Manages container lifecycle via docker-py (Docker or Podman socket)."""
-
-    #: Image runs with a writable root; ``uv pip install --system`` can target system site-packages.
-    system_site_packages_writable: bool = True
 
     def __init__(self, docker_client: Optional[docker.DockerClient] = None):
         """Initialize container manager.
@@ -24,6 +23,15 @@ class ContainerManager:
         """
         self.client = docker_client or docker.from_env()
         self.containers: Dict[str, docker.models.containers.Container] = {}
+        self._user = host_container_user()
+
+    @property
+    def system_site_packages_writable(self) -> bool:
+        """False when we run as a non-root host uid (cannot write /usr site-packages)."""
+        if not self._user:
+            return True
+        uid = self._user.split(":", 1)[0]
+        return uid in ("0", "root")
 
     async def ensure_image(self, image: str) -> None:
         """Pull ``image`` from a registry if it is not already present locally.
@@ -71,19 +79,22 @@ class ContainerManager:
             await self.ensure_image(image)
             # Run in executor to avoid blocking
             loop = asyncio.get_event_loop()
+            create_kw: dict = {
+                "image": image,
+                "command": command if command else None,
+                "volumes": volumes or {},
+                "working_dir": working_dir,
+                "environment": merge_container_environment(environment),
+                "name": name,
+                "detach": True,
+                "stdin_open": True,
+                "tty": True,
+            }
+            if self._user:
+                create_kw["user"] = self._user
             container = await loop.run_in_executor(
                 None,
-                lambda: self.client.containers.create(
-                    image=image,
-                    command=command if command else None,
-                    volumes=volumes or {},
-                    working_dir=working_dir,
-                    environment=environment or {},
-                    name=name,
-                    detach=True,
-                    stdin_open=True,
-                    tty=True,
-                ),
+                lambda: self.client.containers.create(**create_kw),
             )
             container_id = container.id
             self.containers[container_id] = container
@@ -138,15 +149,18 @@ class ContainerManager:
                 )
 
             loop = asyncio.get_event_loop()
+            exec_kw: dict = {
+                "cmd": command,
+                "workdir": workdir,
+                "environment": merge_container_environment(environment),
+                "stdout": True,
+                "stderr": True,
+            }
+            if self._user:
+                exec_kw["user"] = self._user
             exec_result = await loop.run_in_executor(
                 None,
-                lambda: container.exec_run(
-                    command,
-                    workdir=workdir,
-                    environment=environment or {},
-                    stdout=True,
-                    stderr=True,
-                ),
+                lambda: container.exec_run(**exec_kw),
             )
             exit_code = exec_result.exit_code
             output = exec_result.output

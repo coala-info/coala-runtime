@@ -1,10 +1,9 @@
 """R executor tool implementation."""
 
 import logging
-import shlex
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from coala_runtime.runtime.executor_base import BaseExecutor
+from coala_runtime.runtime.executor_base import BaseExecutor, uses_default_coala_image
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +38,21 @@ class RExecutor(BaseExecutor):
         )
 
     def _uses_default_coala_image(self) -> bool:
-        return self.image == self.DEFAULT_IMAGE
+        return uses_default_coala_image(self.image, self.DEFAULT_IMAGE)
 
     def _use_writable_r_library(self) -> bool:
-        """Singularity/Apptainer: install CRAN/Bioc packages under /tmp, not read-only site-library."""
+        """Non-root / Singularity: cannot write the image site-library; use /output."""
         return not getattr(self.container_manager, "system_site_packages_writable", True)
+
+    def exec_environment(self) -> Dict[str, str]:
+        if self._use_writable_r_library():
+            return {"R_LIBS_USER": _SINGULARITY_R_LIB}
+        return {}
+
+    def prepare_runtime_dirs(self) -> list[str]:
+        if self._use_writable_r_library():
+            return [_SINGULARITY_R_LIB]
+        return []
 
     def compose_install_package_list(self, user_packages: List[str]) -> List[str]:
         """Custom images: only user-listed packages (no assumed tidyverse)."""
@@ -63,6 +72,7 @@ class RExecutor(BaseExecutor):
             return []
         sep = chr(31)
         env = {"COALA_R_PROBE_PKGS": sep.join(package_names)}
+        env.update(self.exec_environment())
         r_code = (
             f'pkgs <- strsplit(Sys.getenv("COALA_R_PROBE_PKGS"), "{sep}", fixed=TRUE)[[1]]; '
             "pkgs <- pkgs[nchar(pkgs) > 0]; "
@@ -89,9 +99,7 @@ class RExecutor(BaseExecutor):
     async def prune_install_list_for_container(
         self, container: Any, install_list: List[str]
     ) -> List[str]:
-        """Drop CRAN/Bioc packages already installed in a custom image."""
-        if self._uses_default_coala_image():
-            return list(install_list)
+        """Drop CRAN/Bioc packages already installed in the image."""
         if not install_list:
             return list(install_list)
         names_ordered: List[str] = []
@@ -165,13 +173,7 @@ class RExecutor(BaseExecutor):
 
         # Use double quotes for outer command and escape inner double quotes
         escaped_command = r_command.replace('"', '\\"')
-        lib_sh = shlex.quote(_SINGULARITY_R_LIB)
-        inner = f'Rscript -e "{escaped_command}"'
-        if self._use_writable_r_library():
-            return (
-                f"export R_LIBS_USER={lib_sh} && mkdir -p {lib_sh} && {inner}"
-            )
-        return inner
+        return f'Rscript -e "{escaped_command}"'
 
     def get_execution_command(self, script_path: str) -> str:
         """Get R execution command.
@@ -182,11 +184,7 @@ class RExecutor(BaseExecutor):
         Returns:
             Execution command
         """
-        base = f"Rscript {script_path}"
-        if self._use_writable_r_library():
-            lib_sh = shlex.quote(_SINGULARITY_R_LIB)
-            return f"export R_LIBS_USER={lib_sh} && mkdir -p {lib_sh} && {base}"
-        return base
+        return f"Rscript {script_path}"
 
     def get_default_packages(self) -> List[str]:
         """Get default packages.

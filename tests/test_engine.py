@@ -6,7 +6,9 @@ import pytest
 
 from coala_runtime.runtime.engine import (
     ContainerEngine,
+    container_proxy_env,
     get_engine_from_env,
+    merge_container_environment,
     singularity_image_uri,
 )
 
@@ -98,3 +100,63 @@ def test_get_engine_from_env_unknown_warns(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     assert get_engine_from_env() == ContainerEngine.DOCKER
     assert any("Unknown COALA_CONTAINER_ENGINE" in r.message for r in caplog.records)
+
+
+def _clear_proxy_env(monkeypatch) -> None:
+    for key in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "FTP_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "ftp_proxy",
+        "NO_PROXY",
+        "no_proxy",
+        "COALA_KEEP_PROXY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_loopback_proxy_is_blanked_in_container(monkeypatch):
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:3128")
+    monkeypatch.setenv("HTTPS_PROXY", "http://localhost:3128")
+    env = container_proxy_env()
+    assert env["HTTP_PROXY"] == ""
+    assert env["HTTPS_PROXY"] == ""
+    assert env["NO_PROXY"] == "*"
+
+
+def test_no_host_proxy_blanks_to_override_daemon_inject(monkeypatch):
+    _clear_proxy_env(monkeypatch)
+    env = container_proxy_env()
+    assert env["HTTP_PROXY"] == ""
+    assert env["NO_PROXY"] == "*"
+
+
+def test_corporate_proxy_is_forwarded(monkeypatch):
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.example.com:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+    env = container_proxy_env()
+    assert env["HTTP_PROXY"] == "http://proxy.example.com:8080"
+    assert "NO_PROXY" not in env
+
+
+def test_keep_proxy_preserves_loopback(monkeypatch):
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("COALA_KEEP_PROXY", "1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:3128")
+    env = container_proxy_env()
+    assert env["HTTP_PROXY"] == "http://127.0.0.1:3128"
+
+
+def test_merge_container_environment_proxy_wins_over_caller(monkeypatch):
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    merged = merge_container_environment({"TMPDIR": "/output/.coala-runtime/tmp"})
+    assert merged["TMPDIR"] == "/output/.coala-runtime/tmp"
+    assert merged["HTTP_PROXY"] == ""
+    assert merged["NO_PROXY"] == "*"

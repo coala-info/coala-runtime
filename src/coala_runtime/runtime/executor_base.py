@@ -21,6 +21,22 @@ def _elapsed_s(start: float) -> str:
     return f"[+{time.time() - start:.2f}s]"
 
 
+def uses_default_coala_image(image: str, default_image: str) -> bool:
+    """True if *image* is the default Coala tag, with or without ``:latest``.
+
+    ``coala-runtime-python`` and ``hubentu/coala-runtime-python:latest`` both match
+    ``coala-runtime-python:latest``.
+    """
+    def _name_tag(ref: str) -> tuple[str, str]:
+        base = (ref or "").strip().rsplit("/", 1)[-1]
+        name, _, tag = base.partition(":")
+        return name, tag or "latest"
+
+    got_n, got_t = _name_tag(image)
+    def_n, def_t = _name_tag(default_image)
+    return bool(got_n) and got_n == def_n and got_t == def_t
+
+
 class ExecutionResult:
     """Result of script execution."""
 
@@ -90,6 +106,18 @@ class BaseExecutor(ABC):
         self.container_manager = container_manager or make_container_manager()
         self.output_dir = output_dir or tempfile.mkdtemp(prefix="coala_output_")
         FileHandler.ensure_output_dir(self.output_dir)
+
+    def exec_environment(self) -> Dict[str, str]:
+        """Extra env for install/run (e.g. ``R_LIBS_USER``). Not shell ``export`` prefixes."""
+        return {}
+
+    def prepare_runtime_dirs(self) -> list[str]:
+        """Container paths to ``mkdir -p`` before install/run (argv, not a shell string)."""
+        return []
+
+    def packages_implied_by_script(self, script: str) -> List[str]:
+        """Extra install names implied by ``script`` imports (default: none)."""
+        return []
 
     @abstractmethod
     def get_install_command(self, packages: List[str]) -> str:
@@ -178,6 +206,11 @@ class BaseExecutor(ABC):
         start_time = time.time()
         container = None
         temp_script_file = None
+        pkg_list = list(packages or [])
+        if script:
+            for extra in self.packages_implied_by_script(script):
+                if extra not in pkg_list:
+                    pkg_list.append(extra)
 
         try:
             # Prepare volumes (includes output directory)
@@ -202,12 +235,14 @@ class BaseExecutor(ABC):
             container_script_path = f"/workspace/script{self.get_script_suffix()}"
             volumes[script_path] = {"bind": container_script_path, "mode": "ro"}
 
+            extra_env = self.exec_environment()
             # Create container with a command that keeps it running
             container = await self.container_manager.create_container(
                 image=self.image,
                 command=["tail", "-f", "/dev/null"],  # Keep container running
                 volumes=volumes,
                 working_dir="/workspace",
+                environment=extra_env or None,
             )
 
             # Start container
@@ -259,6 +294,14 @@ class BaseExecutor(ABC):
                 f"{time.time() - start_time:.2f}",
             )
 
+            runtime_dirs = self.prepare_runtime_dirs()
+            if runtime_dirs:
+                await self.container_manager.exec_command(
+                    container,
+                    ["mkdir", "-p", *runtime_dirs],
+                    environment=extra_env or None,
+                )
+
             execution_logs.append("\n" + "=" * 60)
             execution_logs.append("Package install & script phases")
             execution_logs.append("=" * 60)
@@ -272,7 +315,7 @@ class BaseExecutor(ABC):
                 execution_logs.append("-" * 60)
             else:
                 # Install packages (get_install_command filters pre-installed defaults on base image only)
-                install_list = self.compose_install_package_list(packages or [])
+                install_list = self.compose_install_package_list(pkg_list)
                 install_stdout = ""
                 install_stderr = ""
 
@@ -319,7 +362,7 @@ class BaseExecutor(ABC):
 
                         _inst_t = time.time()
                         exit_code, stdout, stderr = await self.container_manager.exec_command(
-                            container, install_cmd
+                            container, install_cmd, environment=extra_env or None
                         )
                         _inst_dt = time.time() - _inst_t
                         install_stdout = stdout.decode("utf-8", errors="replace")
@@ -378,12 +421,14 @@ class BaseExecutor(ABC):
             _script_t = time.time()
             if timeout > 0:
                 exit_code, stdout, stderr = await asyncio.wait_for(
-                    self.container_manager.exec_command(container, exec_cmd),
+                    self.container_manager.exec_command(
+                        container, exec_cmd, environment=extra_env or None
+                    ),
                     timeout=timeout,
                 )
             else:
                 exit_code, stdout, stderr = await self.container_manager.exec_command(
-                    container, exec_cmd
+                    container, exec_cmd, environment=extra_env or None
                 )
             _script_dt = time.time() - _script_t
 

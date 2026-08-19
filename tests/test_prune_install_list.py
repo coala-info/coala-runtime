@@ -9,15 +9,14 @@ from coala_runtime.tools.r_executor import RExecutor
 
 
 @pytest.mark.asyncio
-async def test_python_default_image_no_probe():
+async def test_python_default_image_prunes_present_packages():
     ex = PythonExecutor()
     ex.container_manager = MagicMock()
-    ex.container_manager.exec_command = AsyncMock()
+    ex.container_manager.exec_command = AsyncMock(return_value=(0, b'["seaborn"]', b""))
     c = MagicMock()
-    lst = ["seaborn"]
-    out = await ex.prune_install_list_for_container(c, lst)
-    assert out == lst
-    ex.container_manager.exec_command.assert_not_called()
+    out = await ex.prune_install_list_for_container(c, ["scipy", "seaborn"])
+    assert out == ["seaborn"]
+    ex.container_manager.exec_command.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -45,15 +44,17 @@ async def test_python_custom_probe_failure_falls_back_to_full_list():
 
 
 @pytest.mark.asyncio
-async def test_r_default_image_no_probe():
+async def test_r_default_image_prunes_present_packages():
     ex = RExecutor()
+    sep = chr(31)
     ex.container_manager = MagicMock()
-    ex.container_manager.exec_command = AsyncMock()
+    ex.container_manager.exec_command = AsyncMock(
+        return_value=(0, sep.join(["ggplot2"]).encode(), b"")
+    )
     c = MagicMock()
-    lst = ["ggplot2"]
-    out = await ex.prune_install_list_for_container(c, lst)
-    assert out == lst
-    ex.container_manager.exec_command.assert_not_called()
+    out = await ex.prune_install_list_for_container(c, ["tidyverse", "ggplot2"])
+    assert out == ["ggplot2"]
+    ex.container_manager.exec_command.assert_called_once()
 
 
 @pytest.mark.asyncio

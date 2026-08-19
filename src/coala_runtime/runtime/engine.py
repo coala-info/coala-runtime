@@ -7,8 +7,22 @@ import os
 import shutil
 from enum import Enum
 from pathlib import Path
+from typing import Mapping
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+_PROXY_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "FTP_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "ftp_proxy",
+)
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
 
 
 class ContainerEngine(str, Enum):
@@ -138,6 +152,63 @@ def podman_socket_url() -> str:
         "Podman socket not found. Start Podman (e.g. `podman machine start` on macOS), "
         "or set DOCKER_HOST to your Podman API socket (e.g. unix:///run/user/$UID/podman/podman.sock)."
     )
+
+
+def _proxy_host_is_loopback(value: str) -> bool:
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+    host = (parsed.hostname or "").lower()
+    return host in _LOOPBACK_HOSTS or host.startswith("127.")
+
+
+def container_proxy_env() -> dict[str, str]:
+    """Proxy env for the container so pip/CRAN are not stuck on a host loopback proxy.
+
+    ``HTTP_PROXY=http://127.0.0.1:…`` is reachable on the host and by the Docker
+    daemon, but not from the container netns (Connection refused). Docker may also
+    inject ``~/.docker/config.json`` proxies; blanking overrides that.
+
+    Set ``COALA_KEEP_PROXY=1`` to leave proxy env alone (and pass host proxies into
+    Docker, which does not inherit them). A non-loopback host proxy is forwarded.
+    Does not read docker config.json — use ``COALA_KEEP_PROXY`` if that is the only
+    working path to PyPI.
+    """
+    if os.environ.get("COALA_KEEP_PROXY", "").strip().lower() in {"1", "true", "yes"}:
+        return {k: os.environ[k] for k in _PROXY_KEYS if k in os.environ}
+    host_vals = {k: os.environ[k] for k in _PROXY_KEYS if os.environ.get(k, "").strip()}
+    if host_vals and not any(_proxy_host_is_loopback(v) for v in host_vals.values()):
+        return dict(host_vals)
+    out = {k: "" for k in _PROXY_KEYS}
+    out["NO_PROXY"] = "*"
+    out["no_proxy"] = "*"
+    return out
+
+
+def merge_container_environment(
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Merge caller env with ``container_proxy_env()`` (proxy keys win)."""
+    merged = dict(environment or {})
+    merged.update(container_proxy_env())
+    return merged
+
+
+def host_container_user() -> str | None:
+    """``uid:gid`` so bind-mount writes match the host user (not root).
+
+    Set ``COALA_CONTAINER_USER`` to override (``1001:27``), or empty to keep the
+    image USER (typically root — needed only for system-wide conda installs).
+    """
+    if "COALA_CONTAINER_USER" in os.environ:
+        raw = os.environ["COALA_CONTAINER_USER"].strip()
+        return raw or None
+    getuid = getattr(os, "getuid", None)
+    getgid = getattr(os, "getgid", None)
+    if getuid is None or getgid is None:
+        return None
+    return f"{getuid()}:{getgid()}"
 
 
 def docker_client_for_engine(engine: ContainerEngine):

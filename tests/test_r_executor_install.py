@@ -25,6 +25,13 @@ def test_default_image_skips_redundant_tidyverse_in_command():
     assert "No additional" in cmd or "echo" in cmd.lower()
 
 
+def test_untagged_default_r_image_skips_tidyverse():
+    ex = RExecutor(image="coala-runtime-r")
+    assert ex._uses_default_coala_image()
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES)
+    assert "No additional" in cmd or "echo" in cmd.lower()
+
+
 def test_cran_and_bioc_use_single_biocmanager_install():
     ex = RExecutor(image="rocker/r-ver:4.4")
     cmd = ex.get_install_command(["ggplot2", "bioc::limma"])
@@ -36,16 +43,26 @@ def test_cran_and_bioc_use_single_biocmanager_install():
 def test_singularity_like_install_uses_writable_r_library():
     ex = RExecutor(container_manager=_SingularityLikeManager())
     cmd = ex.get_install_command(["ggplot2"])
-    assert "R_LIBS_USER=" in cmd
     assert "/output/.coala-runtime/R/library" in cmd
     assert ".libPaths" in cmd
     assert "BiocManager::install" in cmd
     assert "ask = FALSE" in cmd
+    assert "export R_LIBS_USER" not in cmd
+    assert ex.exec_environment()["R_LIBS_USER"] == "/output/.coala-runtime/R/library"
 
 
-def test_singularity_like_execution_exports_r_libs_user():
+def test_writable_lib_execution_is_plain_rscript():
     ex = RExecutor(container_manager=_SingularityLikeManager())
     cmd = ex.get_execution_command("/workspace/script.R")
-    assert "R_LIBS_USER=" in cmd
-    assert "/output/.coala-runtime/R/library" in cmd
-    assert "Rscript /workspace/script.R" in cmd
+    assert cmd == "Rscript /workspace/script.R"
+    assert "export" not in cmd
+    assert ex.exec_environment()["R_LIBS_USER"] == "/output/.coala-runtime/R/library"
+
+
+def test_root_docker_execution_has_no_r_libs_user_env():
+    class _Root:
+        system_site_packages_writable = True
+
+    ex = RExecutor(container_manager=_Root())
+    assert ex.get_execution_command("/workspace/script.R") == "Rscript /workspace/script.R"
+    assert ex.exec_environment() == {}

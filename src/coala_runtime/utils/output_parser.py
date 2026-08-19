@@ -5,6 +5,20 @@ from pathlib import Path
 from typing import List, Tuple
 
 
+_RUNTIME_DIR_NAME = ".coala-runtime"
+
+
+def is_user_output_file(path: Path, output_root: Path) -> bool:
+    """True for files the script generated, not runtime internals under ``.coala-runtime``."""
+    if not path.is_file() or path.name.startswith("."):
+        return False
+    try:
+        rel = path.resolve().relative_to(output_root.resolve())
+    except ValueError:
+        return False
+    return _RUNTIME_DIR_NAME not in rel.parts
+
+
 class OutputParser:
     """Parses script output to extract files and data."""
 
@@ -46,21 +60,13 @@ class OutputParser:
         if output_path.exists() and output_path.is_dir():
             logger.debug(f"Scanning output directory: {output_path}")
 
-            # Use rglob to find all files recursively
             for item in output_path.rglob("*"):
-                if item.is_file():
-                    # Get absolute path
-                    full_path = item.resolve()
-                    full_path_str = str(full_path)
-
-                    # Skip hidden files and common non-output files
-                    if not item.name.startswith(".") and item.name not in [
-                        ".gitkeep",
-                        ".gitignore",
-                    ]:
-                        if full_path_str not in output_files:
-                            output_files.append(full_path_str)
-                            logger.debug(f"Found output file: {full_path_str}")
+                if not is_user_output_file(item, output_path):
+                    continue
+                full_path_str = str(item.resolve())
+                if full_path_str not in output_files:
+                    output_files.append(full_path_str)
+                    logger.debug(f"Found output file: {full_path_str}")
         else:
             logger.warning(f"Output directory does not exist: {output_path}")
 
@@ -94,7 +100,7 @@ class OutputParser:
                     # Ensure the resolved path is within output_dir (security check)
                     try:
                         full_path.relative_to(output_path)
-                        if full_path.exists() and full_path.is_file():
+                        if is_user_output_file(full_path, output_path):
                             full_path_str = str(full_path)
                             if full_path_str not in output_files:
                                 output_files.append(full_path_str)
