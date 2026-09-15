@@ -17,9 +17,9 @@ class _RootLikeManager:
 
 def test_default_image_uses_uv_for_packages():
     ex = PythonExecutor(container_manager=_RootLikeManager())
-    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["seaborn"])
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["statsmodels"])
     assert "uv pip install --system" in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
 
 
 def test_custom_image_uses_pip_for_packages():
@@ -27,9 +27,9 @@ def test_custom_image_uses_pip_for_packages():
         image="quay.io/biocontainers/snapatac2:2.9.0--py312h91a5aaa_0",
         container_manager=_RootLikeManager(),
     )
-    cmd = ex.get_install_command(["seaborn"])
+    cmd = ex.get_install_command(["statsmodels"])
     assert "python -m pip install" in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
     assert "uv pip" not in cmd
 
 
@@ -39,11 +39,11 @@ def test_conda_packages_field_before_pip():
         conda_packages=["samtools"],
         container_manager=_RootLikeManager(),
     )
-    cmd = ex.get_install_command(["seaborn"])
+    cmd = ex.get_install_command(["statsmodels"])
     assert "conda install" in cmd or "mamba install" in cmd
     assert "samtools" in cmd
     assert "python -m pip install" in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
     assert " && " in cmd
 
 
@@ -52,10 +52,10 @@ def test_conda_prefix_in_packages():
         image="quay.io/foo/bar:latest",
         container_manager=_RootLikeManager(),
     )
-    cmd = ex.get_install_command(["conda::samtools", "seaborn"])
+    cmd = ex.get_install_command(["conda::samtools", "statsmodels"])
     assert "samtools" in cmd
     assert "conda::" not in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
 
 
 def test_conda_only_no_pip_extras():
@@ -72,18 +72,18 @@ def test_conda_only_no_pip_extras():
 
 def test_pip_packages_to_install_excludes_conda_prefix():
     ex = PythonExecutor(conda_packages=["x"])
-    all_p = ex.DEFAULT_PACKAGES + ["conda::samtools", "seaborn"]
-    assert ex.pip_packages_to_install(all_p) == ["seaborn"]
+    all_p = ex.DEFAULT_PACKAGES + ["conda::samtools", "statsmodels"]
+    assert ex.pip_packages_to_install(all_p) == ["statsmodels"]
 
 
 def test_install_plan_log_details_includes_conda():
     ex = PythonExecutor(conda_packages=["samtools"])
-    all_p = ex.DEFAULT_PACKAGES + ["seaborn"]
+    all_p = ex.DEFAULT_PACKAGES + ["statsmodels"]
     pip_t = ex.pip_packages_to_install(all_p)
     line = ex.install_plan_log_details(all_p, pip_t)
     assert "conda=" in line
     assert "samtools" in line
-    assert "seaborn" in line
+    assert "statsmodels" in line
 
 
 def test_no_packages_echo():
@@ -94,7 +94,7 @@ def test_no_packages_echo():
 
 def test_custom_image_does_not_merge_default_python_packages():
     ex = PythonExecutor(image="custom:latest")
-    assert ex.compose_install_package_list(["seaborn"]) == ["seaborn"]
+    assert ex.compose_install_package_list(["statsmodels"]) == ["statsmodels"]
     assert ex.compose_install_package_list([]) == []
 
 
@@ -105,9 +105,9 @@ def test_custom_image_pip_targets_include_numpy_if_requested():
 
 def test_default_image_still_prepends_defaults_for_compose():
     ex = PythonExecutor()
-    merged = ex.compose_install_package_list(["seaborn"])
+    merged = ex.compose_install_package_list(["statsmodels"])
     assert set(ex.DEFAULT_PACKAGES).issubset(set(merged))
-    assert "seaborn" in merged
+    assert "statsmodels" in merged
 
 
 def test_singularity_like_uses_prefix_instead_of_system_uv():
@@ -136,15 +136,15 @@ def test_untagged_default_image_uses_uv_like_latest():
         container_manager=_RootLikeManager(),
     )
     assert ex._uses_default_coala_image()
-    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["seaborn"])
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["statsmodels"])
     assert "uv pip install --system" in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
 
 
 def test_hub_default_image_is_still_default():
     ex = PythonExecutor(image="hubentu/coala-runtime-python:latest")
     assert ex._uses_default_coala_image()
-    assert ex.pip_packages_to_install(["numpy", "seaborn"]) == ["seaborn"]
+    assert ex.pip_packages_to_install(["numpy", "statsmodels"]) == ["statsmodels"]
 
 
 def test_packages_implied_by_script_maps_bs4():
@@ -170,8 +170,8 @@ def test_singularity_like_custom_image_uses_pip_prefix():
         image="quay.io/biocontainers/snapatac2:2.9.0--py312h91a5aaa_0",
         container_manager=_SingularityLikeManager(),
     )
-    cmd = ex.get_install_command(["seaborn"])
+    cmd = ex.get_install_command(["statsmodels"])
     assert "python -m pip install" in cmd
     assert "--prefix /output/.coala-runtime/pip-prefix" in cmd
-    assert "seaborn" in cmd
+    assert "statsmodels" in cmd
     assert "export" not in cmd

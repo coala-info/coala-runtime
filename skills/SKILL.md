@@ -32,7 +32,7 @@ Replace `/path/to/coala-runtime` with the real path. Restart the client; tools `
 
 | Tool | Use for |
 |------|--------|
-| `coala_python_executor` | Python scripts (uv for packages; image includes numpy, pandas, matplotlib). |
+| `coala_python_executor` | Python scripts (uv for packages; image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn). |
 | `coala_r_executor` | R scripts (CRAN + Bioconductor via `bioc::package_name`; image includes tidyverse). |
 
 Use **one** of `script` (code string) or `script_file` (host path to script). Prefer `script_file` when the script is long or has encoding/special characters to avoid serialization issues.
@@ -49,8 +49,8 @@ Use **one** of `script` (code string) or `script_file` (host path to script). Pr
 
 ## Python: `coala_python_executor`
 
-- **Pre-installed:** numpy, pandas, matplotlib (do not reinstall).
-- **packages:** List of names; version specifiers allowed, e.g. `["scikit-learn", "requests>=2.31.0"]`. Installed with `uv pip install --system` on the default image; on a custom **docker_image**, installs use `pip` unless `skip_package_install` is true.
+- **Pre-installed:** numpy, pandas, scipy, matplotlib, scikit-learn, seaborn (do not reinstall).
+- **packages:** List of names; version specifiers allowed, e.g. `["statsmodels", "requests>=2.31.0"]`. Installed with `uv pip install --system` on the default image; on a custom **docker_image**, installs use `pip` unless `skip_package_install` is true.
 - **conda_packages** (optional): Conda-only specs (e.g. `["samtools"]`); requires conda/mamba in **docker_image** when used.
 - **Execution:** Script runs in container as `python /workspace/script.py`; working directory is `/workspace`.
 
@@ -59,7 +59,7 @@ Example (conceptual):
 ```json
 {
   "script": "import pandas as pd; df = pd.read_csv('/input/data.csv'); print(df.head())",
-  "packages": ["scikit-learn"],
+  "packages": ["statsmodels"],
   "input_files": { "/input/data.csv": "/absolute/host/path/data.csv" },
   "timeout": 120
 }

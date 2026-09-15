@@ -9,7 +9,7 @@ An MCP (Model Context Protocol) server for executing Python and R scripts in con
   - Python: Uses `uv` for fast package installation
   - R: Based on `bioconductor/bioconductor_docker` (BiocManager for CRAN and Bioconductor packages)
 - **File Mounting**: Bind-mount local files and directories into containers
-- **Pre-installed packages**: Python image includes numpy, pandas, matplotlib; R image includes tidyverse
+- **Pre-installed packages**: Python image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn; R image includes tidyverse
 - **MCP Integration**: Exposes `coala_python_executor` and `coala_r_executor` tools for LLM interaction
 
 ## Prerequisites
@@ -80,7 +80,7 @@ Executes Python scripts in a containerized environment with uv package managemen
 
 **Input:**
 - `script` or `script_file` (one required): Inline Python code or host path to a `.py` file
-- `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, matplotlib. Can include version specifiers (e.g., 'requests>=2.31.0')
+- `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn. Can include version specifiers (e.g., 'requests>=2.31.0')
 - `conda_packages` (optional, Python only): Conda specs installed before pip/uv (requires conda/mamba in the image)
 - `docker_image` (optional): Docker image to run instead of the default Coala Python image (e.g. `python:3.12-slim`, `quay.io/biocontainers/...`)
 - `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)

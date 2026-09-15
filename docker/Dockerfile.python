@@ -28,7 +28,7 @@ RUN mkdir -p /workspace /input /output
 WORKDIR /workspace
 
 # Install default Python packages using uv
-RUN uv pip install --system numpy pandas scipy matplotlib
+RUN uv pip install --system numpy pandas scipy matplotlib scikit-learn seaborn
 
 # Default command (can be overridden)
 CMD ["python"]

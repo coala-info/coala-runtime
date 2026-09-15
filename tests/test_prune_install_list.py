@@ -12,10 +12,10 @@ from coala_runtime.tools.r_executor import RExecutor
 async def test_python_default_image_prunes_present_packages():
     ex = PythonExecutor()
     ex.container_manager = MagicMock()
-    ex.container_manager.exec_command = AsyncMock(return_value=(0, b'["seaborn"]', b""))
+    ex.container_manager.exec_command = AsyncMock(return_value=(0, b'["statsmodels"]', b""))
     c = MagicMock()
-    out = await ex.prune_install_list_for_container(c, ["scipy", "seaborn"])
-    assert out == ["seaborn"]
+    out = await ex.prune_install_list_for_container(c, ["scipy", "statsmodels"])
+    assert out == ["statsmodels"]
     ex.container_manager.exec_command.assert_called_once()
 
 
@@ -24,12 +24,12 @@ async def test_python_custom_prune_keeps_missing_pip_only():
     ex = PythonExecutor(image="quay.io/biocontainers/snapatac2:latest")
     ex.container_manager = MagicMock()
     ex.container_manager.exec_command = AsyncMock(
-        return_value=(0, b'["seaborn","pandas"]', b"")
+        return_value=(0, b'["statsmodels","pandas"]', b"")
     )
     c = MagicMock()
-    before = ["snapatac2", "seaborn", "conda::samtools", "pandas"]
+    before = ["snapatac2", "statsmodels", "conda::samtools", "pandas"]
     out = await ex.prune_install_list_for_container(c, before)
-    assert out == ["seaborn", "conda::samtools", "pandas"]
+    assert out == ["statsmodels", "conda::samtools", "pandas"]
 
 
 @pytest.mark.asyncio

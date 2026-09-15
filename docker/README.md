@@ -66,7 +66,7 @@ docker build --build-arg BIOC_DOCKER_TAG=RELEASE_3_22 -f docker/Dockerfile.r -t 
 
 - **Base**: `python:3.12-slim` (multi-arch: amd64, arm64)
 - **Package Manager**: `uv` (installed from official installer)
-- **Default Packages**: numpy, pandas, matplotlib
+- **Default Packages**: numpy, pandas, scipy, matplotlib, scikit-learn, seaborn
 - **Directories**: `/workspace`, `/input`, `/output`
 
 ### R Image (`coala-runtime-r`)
