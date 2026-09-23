@@ -4,19 +4,20 @@ This document explains how to configure the Coala Runtime MCP server in various 
 
 ## Prerequisites
 
-1. **Container runtime**: **Docker**, **Podman** (Docker-compatible API), or **Singularity / Apptainer** for `docker://` images.
+1. **Container runtime**: **Docker**, **Podman** (Docker-compatible API), **xcodon** (rootless, no daemon), or **Singularity / Apptainer** for `docker://` images.
 
-   If you **do not** set `COALA_CONTAINER_ENGINE` or `--engine`, the server **auto-detects**: it uses Docker when the daemon responds, otherwise Podman if its socket is available, otherwise **Apptainer** or **Singularity** if that CLI is on `PATH` (common on **HPC** clusters that only ship Apptainer).
+   If you **do not** set `COALA_CONTAINER_ENGINE` or `--engine`, the server **auto-detects**: it uses Docker when the daemon responds, otherwise Podman if its socket is available, otherwise **xcodon** if it is installed, otherwise **Apptainer** or **Singularity** if that CLI is on `PATH` (common on **HPC** clusters that only ship Apptainer).
 
    To force a runtime, set at startup:
 
    ```bash
-   export COALA_CONTAINER_ENGINE=podman      # or docker | singularity | apptainer
+   export COALA_CONTAINER_ENGINE=podman      # or docker | singularity | apptainer | xcodon
    ```
 
    Or pass **`--engine NAME`** on `coala-runtime` (overrides the env var for that process), e.g. `"args": ["--engine", "podman"]` in MCP config.
 
    - **Podman**: docker-py talks to the Podman socket. Set `DOCKER_HOST` if needed (e.g. `unix:///run/user/$UID/podman/podman.sock`).
+   - **xcodon**: rootless runtime with no daemon; install with `pip install 'coala-runtime[xcodon]'`; autodetected when Docker and Podman are unavailable.
    - **Singularity / Apptainer**: uses the CLI (`singularity` or `apptainer`). Default images such as `coala-runtime-python:latest` are run as `docker://hubentu/coala-runtime-python:latest` when pulled from Docker Hub. Proactive image setup at server start is skipped; the first execution pulls/caches the image.
 
 2. **Executor images (Docker/Podman):** on first start, `coala-runtime` builds `coala-runtime-python:latest` and `coala-runtime-r:latest` locally if they are missing (requires MCP `cwd` pointing at this repo). To fetch pre-built images from Docker Hub instead, pass **`--pull`** (pulls `hubentu/coala-runtime-*` and retags locally):

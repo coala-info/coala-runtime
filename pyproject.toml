@@ -38,6 +38,7 @@ dev = [
     "black>=24.0.0",
     "ruff>=0.8.0",
 ]
+xcodon = ["xcodon-runtime>=0.1"]
 
 [build-system]
 requires = ["hatchling"]

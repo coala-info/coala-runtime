@@ -1,6 +1,7 @@
 """Tests for container engine helpers."""
 
 import logging
+import sys
 
 import pytest
 
@@ -41,6 +42,7 @@ def test_singularity_image_uri_empty():
 
 def test_get_engine_from_env_unset_autodetects_apptainer_when_no_docker(monkeypatch):
     monkeypatch.delenv("COALA_CONTAINER_ENGINE", raising=False)
+    monkeypatch.setitem(sys.modules, "xcodon_runtime", None)  # simulate xcodon-runtime not installed
 
     def fake_which(name: str) -> str | None:
         if name == "apptainer":
@@ -71,6 +73,7 @@ def test_get_engine_from_env_unset_autodetects_docker_when_daemon_up(monkeypatch
 
 def test_get_engine_from_env_unset_autodetects_singularity_if_no_apptainer(monkeypatch):
     monkeypatch.delenv("COALA_CONTAINER_ENGINE", raising=False)
+    monkeypatch.setitem(sys.modules, "xcodon_runtime", None)  # simulate xcodon-runtime not installed
 
     def fake_which(name: str) -> str | None:
         if name == "singularity":
