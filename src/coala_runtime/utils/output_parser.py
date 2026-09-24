@@ -10,11 +10,12 @@ _RUNTIME_DIR_NAME = ".coala-runtime"
 
 def is_user_output_file(path: Path, output_root: Path) -> bool:
     """True for files the script generated, not runtime internals under ``.coala-runtime``."""
-    if not path.is_file() or path.name.startswith("."):
-        return False
     try:
+        if not path.is_file() or path.name.startswith("."):
+            return False
         rel = path.resolve().relative_to(output_root.resolve())
-    except ValueError:
+    except (OSError, ValueError):
+        # OSError: a "path" that came out of a log line — too long, or otherwise not statable.
         return False
     return _RUNTIME_DIR_NAME not in rel.parts
 
@@ -28,7 +29,7 @@ class OutputParser:
         r"Output file:?\s+(.+)",
         r"File saved:?\s+(.+)",
         r"Writing to:?\s+(.+)",
-        r"/output/(.+)",  # Direct output directory references
+        r"/output/(\S+)",  # Direct output directory references; a path ends at whitespace
     ]
 
     @staticmethod
@@ -94,11 +95,14 @@ class OutputParser:
                     # Absolute path, try to resolve relative to output_dir
                     file_path = file_path.lstrip("/")
 
-                # Check if file exists in output directory
+                # Check if file exists in output directory. Anything a regex pulled out of a
+                # log line may not be a path at all — a compiler diagnostic once matched here
+                # and its resolve() raised ENAMETOOLONG, which escaped and replaced the whole
+                # execution result. One bad token must never cost the real output.
                 if output_path.exists():
-                    full_path = (output_path / file_path).resolve()
-                    # Ensure the resolved path is within output_dir (security check)
                     try:
+                        full_path = (output_path / file_path).resolve()
+                        # Ensure the resolved path is within output_dir (security check)
                         full_path.relative_to(output_path)
                         if is_user_output_file(full_path, output_path):
                             full_path_str = str(full_path)
@@ -108,7 +112,8 @@ class OutputParser:
                     except ValueError:
                         # Path is outside output_dir, skip it
                         logger.debug(f"Skipping path outside output_dir: {file_path}")
-                        pass
+                    except OSError as e:
+                        logger.debug(f"Skipping non-path token from output: {file_path[:80]!r} ({e})")
 
         # Remove duplicates and sort
         output_files = sorted(list(set(output_files)))
