@@ -32,7 +32,7 @@ class ContainerEngine(str, Enum):
     PODMAN = "podman"
     SINGULARITY = "singularity"
     APPTAINER = "apptainer"
-    XCODON = "xcodon"
+    XRUNNER = "xrunner"
 
 
 def singularity_image_uri(image: str) -> str:
@@ -89,8 +89,8 @@ def _autodetect_container_engine() -> ContainerEngine:
 
     try:
         import xcodon_runtime  # noqa: F401
-        logger.info("COALA_CONTAINER_ENGINE unset; using xcodon (no usable Docker/Podman on this host).")
-        return ContainerEngine.XCODON
+        logger.info("COALA_CONTAINER_ENGINE unset; using xrunner (no usable Docker/Podman on this host).")
+        return ContainerEngine.XRUNNER
     except ImportError:
         pass
 
@@ -133,12 +133,12 @@ def get_engine_from_env() -> ContainerEngine:
         "apptainer": ContainerEngine.APPTAINER,
         "podman": ContainerEngine.PODMAN,
         "docker": ContainerEngine.DOCKER,
-        "xcodon": ContainerEngine.XCODON,
+        "xrunner": ContainerEngine.XRUNNER,
     }
     if raw not in aliases:
         logger.warning(
             "Unknown COALA_CONTAINER_ENGINE=%r; using docker. "
-            "Valid values: docker, podman, singularity, apptainer, xcodon.",
+            "Valid values: docker, podman, singularity, apptainer, xrunner.",
             raw,
         )
         return ContainerEngine.DOCKER
@@ -237,7 +237,7 @@ def make_container_manager():
 
         return ContainerManager(docker_client=docker_client_for_engine(engine))
 
-    if engine == ContainerEngine.XCODON:
+    if engine == ContainerEngine.XRUNNER:
         from xcodon_runtime.coala_adapter import XcodonContainerManager
 
         return XcodonContainerManager()
