@@ -204,6 +204,12 @@ def merge_container_environment(
     return merged
 
 
+def gpu_requested_from_env() -> bool:
+    """``COALA_GPU=1|true|yes|on`` makes GPU passthrough the default for every execution."""
+    raw = (os.environ.get("COALA_GPU") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def host_container_user() -> str | None:
     """``uid:gid`` so bind-mount writes match the host user (not root).
 

@@ -9,6 +9,7 @@ An MCP (Model Context Protocol) server for executing Python and R scripts in con
   - Python: Uses `uv` for fast package installation
   - R: Based on `bioconductor/bioconductor_docker` (BiocManager for CRAN and Bioconductor packages)
 - **File Mounting**: Bind-mount local files and directories into containers
+- **GPU Passthrough**: Opt-in NVIDIA GPU access per call (`gpu: true`) or globally (`COALA_GPU=1`) — see [MCP_CONFIG.md](MCP_CONFIG.md)
 - **Pre-installed packages**: Python image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn; R image includes tidyverse
 - **MCP Integration**: Exposes `coala_python_executor` and `coala_r_executor` tools for LLM interaction
 
@@ -86,6 +87,7 @@ Executes Python scripts in a containerized environment with uv package managemen
 - `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
+- `gpu` (optional): If `true`, expose the host's NVIDIA GPUs to the container (`--gpus all` on Docker/Podman, `--nv` on Singularity/Apptainer). Omit to follow `COALA_GPU` (default off). The default images have no CUDA libraries; add e.g. `torch` via `packages` or use a CUDA `docker_image`
 
 **Output:**
 - `success`: Whether execution succeeded
@@ -108,6 +110,7 @@ Executes R scripts in a containerized environment with Bioconductor Docker (Bioc
 - `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})
 - `timeout` (optional): Execution timeout in seconds (default: 300, 0 = no timeout, max: 3600)
+- `gpu` (optional): If `true`, expose the host's NVIDIA GPUs to the container (`--gpus all` on Docker/Podman, `--nv` on Singularity/Apptainer). Omit to follow `COALA_GPU` (default off). The default images have no CUDA libraries; add e.g. `torch` via `packages` or use a CUDA `docker_image`
 
 **Output:** Same as `coala_python_executor`
 

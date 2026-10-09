@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import inspect
 import logging
 import tempfile
 import time
@@ -9,7 +10,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from coala_runtime.runtime.engine import make_container_manager
+from coala_runtime.runtime.engine import gpu_requested_from_env, make_container_manager
 from coala_runtime.runtime.file_handler import FileHandler
 from coala_runtime.utils.output_parser import OutputParser
 
@@ -111,6 +112,14 @@ class BaseExecutor(ABC):
         """Extra env for install/run (e.g. ``R_LIBS_USER``). Not shell ``export`` prefixes."""
         return {}
 
+    def _backend_supports_gpu(self) -> bool:
+        """True when the container backend's ``create_container`` accepts ``gpu``."""
+        try:
+            sig = inspect.signature(self.container_manager.create_container)
+        except (TypeError, ValueError):
+            return False
+        return "gpu" in sig.parameters
+
     def prepare_runtime_dirs(self) -> list[str]:
         """Container paths to ``mkdir -p`` before install/run (argv, not a shell string)."""
         return []
@@ -183,6 +192,7 @@ class BaseExecutor(ABC):
         input_files: Optional[Dict[str, str]] = None,
         timeout: int = 300,
         skip_package_install: bool = False,
+        gpu: Optional[bool] = None,
     ) -> ExecutionResult:
         """Execute a script in a container.
 
@@ -193,6 +203,7 @@ class BaseExecutor(ABC):
             input_files: Map of container paths to host paths
             timeout: Execution timeout in seconds (0 = no timeout)
             skip_package_install: If True, do not run package installation (e.g. custom image with deps baked in)
+            gpu: Expose host GPUs to the container. ``None`` follows ``COALA_GPU``.
 
         Returns:
             Execution result
@@ -202,6 +213,23 @@ class BaseExecutor(ABC):
             raise ValueError("Either 'script' or 'script_file' must be provided")
         if script and script_file:
             raise ValueError("Cannot provide both 'script' and 'script_file'")
+
+        use_gpu = gpu_requested_from_env() if gpu is None else bool(gpu)
+        if use_gpu and not self._backend_supports_gpu():
+            return ExecutionResult(
+                success=False,
+                exit_code=-1,
+                stdout="",
+                stderr=(
+                    "GPU passthrough is not supported by the configured container backend "
+                    f"({type(self.container_manager).__name__}). Use COALA_CONTAINER_ENGINE="
+                    "docker, podman, singularity, or apptainer, or run without gpu=true."
+                ),
+                output_files=[],
+                output_data="",
+                container_logs="",
+                execution_time=0.0,
+            )
 
         start_time = time.time()
         container = None
@@ -237,13 +265,16 @@ class BaseExecutor(ABC):
 
             extra_env = self.exec_environment()
             # Create container with a command that keeps it running
-            container = await self.container_manager.create_container(
-                image=self.image,
-                command=["tail", "-f", "/dev/null"],  # Keep container running
-                volumes=volumes,
-                working_dir="/workspace",
-                environment=extra_env or None,
-            )
+            create_kw: Dict[str, Any] = {
+                "image": self.image,
+                "command": ["tail", "-f", "/dev/null"],  # Keep container running
+                "volumes": volumes,
+                "working_dir": "/workspace",
+                "environment": extra_env or None,
+            }
+            if self._backend_supports_gpu():
+                create_kw["gpu"] = use_gpu
+            container = await self.container_manager.create_container(**create_kw)
 
             # Start container
             await self.container_manager.start_container(container)

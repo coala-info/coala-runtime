@@ -156,12 +156,36 @@ You can optionally set environment variables for the server:
       "env": {
         "COALA_CONTAINER_ENGINE": "podman",
         "DOCKER_HOST": "unix:///run/user/1000/podman/podman.sock",
+        "COALA_GPU": "1",
         "LOG_LEVEL": "INFO"
       }
     }
   }
 }
 ```
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `COALA_CONTAINER_ENGINE` | auto-detect | `docker`, `podman`, `singularity`, `apptainer`, or `xcrunner` |
+| `DOCKER_HOST` | Docker default | Socket URL for Docker or Podman |
+| `COALA_GPU` | `0` | `1` exposes host NVIDIA GPUs to every execution. Per-call `gpu: true` / `gpu: false` overrides it. |
+| `COALA_CONTAINER_USER` | host `uid:gid` | User inside Docker/Podman containers (empty keeps the image user) |
+| `COALA_KEEP_PROXY` | `0` | `1` passes host proxy variables into the container unchanged |
+| `LOG_LEVEL` | `INFO` | Server log verbosity |
+
+## GPU Support
+
+Both tools accept `gpu: true` to expose the host's NVIDIA GPUs to the container. Set `COALA_GPU=1` in the server environment to make that the default for every call; a per-call `gpu: false` still turns it off.
+
+What each engine does:
+
+- **Docker / Podman**: a device request for all GPUs, the same as `docker run --gpus all`. The host needs the NVIDIA driver and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Test with `docker run --rm --gpus all ubuntu nvidia-smi -L`.
+- **Singularity / Apptainer**: `--nv` at instance start, which binds the host driver libraries and devices. Only the host NVIDIA driver is needed.
+- **xcrunner**: not supported. A `gpu: true` call returns an error instead of silently running on the CPU.
+
+The default `coala-runtime-python` and `coala-runtime-r` images contain no CUDA libraries. Install GPU frameworks per call (for example `packages: ["torch"]`), or pass a CUDA-based `docker_image` such as `pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime` with `skip_package_install: true`.
+
+If Docker reports `could not select device driver "" with capabilities: [[gpu]]`, the NVIDIA Container Toolkit is missing or Docker has not been restarted after installing it.
 
 ## Verification
 

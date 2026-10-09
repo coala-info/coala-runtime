@@ -101,6 +101,17 @@ class PythonExecutorInput(BaseModel):
             "Typical with a custom `docker_image` that already includes dependencies."
         ),
     )
+    gpu: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Expose the host's NVIDIA GPUs to the container (Docker/Podman `--gpus all`, "
+            "Singularity/Apptainer `--nv`). Requires the NVIDIA driver on the host and, for "
+            "Docker/Podman, the NVIDIA Container Toolkit. The default image has no CUDA "
+            "libraries: add GPU packages via `packages` (e.g. 'torch') or use a CUDA-based "
+            "`docker_image`. When omitted, follows the server's COALA_GPU environment variable "
+            "(default off)."
+        ),
+    )
 
     @field_validator("script")
     @classmethod
@@ -193,6 +204,17 @@ class RExecutorInput(BaseModel):
         description=(
             "When True, skip package installation entirely; `packages` is ignored for install. "
             "Typical with a custom `docker_image` that already includes dependencies."
+        ),
+    )
+    gpu: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Expose the host's NVIDIA GPUs to the container (Docker/Podman `--gpus all`, "
+            "Singularity/Apptainer `--nv`). Requires the NVIDIA driver on the host and, for "
+            "Docker/Podman, the NVIDIA Container Toolkit. The default image has no CUDA "
+            "libraries: add GPU packages via `packages` (e.g. 'torch') or use a CUDA-based "
+            "`docker_image`. When omitted, follows the server's COALA_GPU environment variable "
+            "(default off)."
         ),
     )
 
@@ -379,6 +401,7 @@ async def coala_python_executor(
             - docker_image (Optional[str]): Docker image to use instead of the default Coala Python image.
             - skip_package_install (bool): When True, skip package installation (`packages` ignored for install);
               typical for custom `docker_image` values with dependencies pre-installed.
+            - gpu (Optional[bool]): Expose host NVIDIA GPUs to the container. Omit to follow COALA_GPU (default off).
 
     Returns:
         ExecutionResultOutput: Structured result containing:
@@ -495,7 +518,7 @@ async def coala_python_executor(
             logger.info(
                 f"Executing Python script from file: {script_file_path} "
                 f"(image: {executor.image}, packages: {packages}, conda_packages: {conda_packages}, "
-                f"skip_package_install: {params.skip_package_install}, timeout: {timeout})"
+                f"skip_package_install: {params.skip_package_install}, gpu: {params.gpu}, timeout: {timeout})"
             )
 
             # Always use script_file parameter (never pass script string directly)
@@ -505,6 +528,7 @@ async def coala_python_executor(
                 input_files=input_files,
                 timeout=timeout,
                 skip_package_install=params.skip_package_install,
+                gpu=params.gpu,
             )
         except Exception as e:
             # If execution fails and we have a script string, log that we tried file-based approach
@@ -577,6 +601,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
               Coala R image (must provide `Rscript`).
             - skip_package_install (bool): When True, skip package installation (`packages` ignored for install);
               typical for custom `docker_image` values with dependencies pre-installed.
+            - gpu (Optional[bool]): Expose host NVIDIA GPUs to the container. Omit to follow COALA_GPU (default off).
 
     Returns:
         ExecutionResultOutput: Structured result containing:
@@ -674,7 +699,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
             logger.info(
                 f"Executing R script from file: {script_file_path} "
                 f"(image: {executor.image}, packages: {packages}, "
-                f"skip_package_install: {params.skip_package_install}, timeout: {timeout})"
+                f"skip_package_install: {params.skip_package_install}, gpu: {params.gpu}, timeout: {timeout})"
             )
 
             # Always use script_file parameter (never pass script string directly)
@@ -684,6 +709,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
                 input_files=input_files,
                 timeout=timeout,
                 skip_package_install=params.skip_package_install,
+                gpu=params.gpu,
             )
         except Exception as e:
             # If execution fails and we have a script string, log that we tried file-based approach

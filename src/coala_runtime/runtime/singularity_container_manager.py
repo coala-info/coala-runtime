@@ -97,6 +97,7 @@ class SingularityContainerManager:
         working_dir: str = "/workspace",
         environment: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
+        gpu: bool = False,
     ) -> SingularityInstanceContainer:
         del working_dir, environment, name  # applied on exec, not instance start
         _ = command  # always use tail keeper like Docker path
@@ -109,6 +110,8 @@ class SingularityContainerManager:
             "--writable-tmpfs",
             "--compat",
         ]
+        if gpu:
+            argv.append("--nv")  # bind host NVIDIA driver libs + devices
         argv.extend(self._bind_cli_args(volumes))
         argv.extend([uri, instance_name, "tail", "-f", "/dev/null"])
 

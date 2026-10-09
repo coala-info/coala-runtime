@@ -6,6 +6,7 @@ from typing import Dict, Optional, Sequence, Union
 
 import docker
 from docker.errors import DockerException, ImageNotFound
+from docker.types import DeviceRequest
 
 from coala_runtime.runtime.engine import host_container_user, merge_container_environment
 
@@ -61,6 +62,7 @@ class ContainerManager:
         working_dir: str = "/workspace",
         environment: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
+        gpu: bool = False,
     ) -> docker.models.containers.Container:
         """Create a Docker container.
 
@@ -71,6 +73,8 @@ class ContainerManager:
             working_dir: Working directory in container
             environment: Environment variables
             name: Optional container name
+            gpu: Expose all host GPUs (same as ``docker run --gpus all``; needs the
+                NVIDIA Container Toolkit on the host)
 
         Returns:
             Created container object
@@ -92,6 +96,8 @@ class ContainerManager:
             }
             if self._user:
                 create_kw["user"] = self._user
+            if gpu:
+                create_kw["device_requests"] = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
             container = await loop.run_in_executor(
                 None,
                 lambda: self.client.containers.create(**create_kw),

@@ -46,6 +46,7 @@ Use **one** of `script` (code string) or `script_file` (host path to script). Pr
 - **skip_package_install** (optional): When `true`, no install step runs (`packages` ignored for install). Use with images that already include dependencies.
 - **input_files** (optional): Map **container path → host path** for bind-mounting. Example: `{"/input/data.csv": "/path/on/host/data.csv"}`. Scripts read from the container path (e.g. `/input/data.csv`).
 - **timeout** (optional): Seconds (default 300, max 3600, 0 = no limit).
+- **gpu** (optional): `true` exposes the host's NVIDIA GPUs (`--gpus all` on Docker/Podman, `--nv` on Singularity/Apptainer). Omit to follow the server's `COALA_GPU` setting (default off). Default images have no CUDA libraries: add `"torch"` etc. to **packages** or use a CUDA **docker_image**.
 
 ## Python: `coala_python_executor`
 
