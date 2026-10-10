@@ -30,6 +30,27 @@ REGISTRY_PULL_IMAGES = {
 PULL_IMAGES = list(REGISTRY_PULL_IMAGES.values())
 
 
+def registry_source_for(image: str) -> str | None:
+    """The Docker Hub source for a local executor tag, or ``None`` for anything else.
+
+    ``coala-runtime-python:latest`` is a *local* tag: ``docker/build.sh`` produces it and
+    ``coala-runtime pull`` retags :data:`REGISTRY_PULL_IMAGES` onto it. Nothing publishes it
+    under that name, so an unqualified reference resolves to ``docker.io/library/…`` — the
+    official-images namespace — and a registry fetch 404s on a host where neither command has
+    run. ``singularity_image_uri`` has always consulted this mapping; the callers that fetch on
+    demand did not, which is how a run hit "not found on Docker Hub, or it needs a login".
+
+    ``coala-runtime-python`` and ``coala-runtime-python:latest`` are the same tag, the way
+    ``uses_default_coala_image`` already treats them.
+    """
+    ref = (image or "").strip()
+    if not ref:
+        return None
+    if ":" not in ref.rsplit("/", 1)[-1]:
+        ref = f"{ref}:latest"
+    return REGISTRY_PULL_IMAGES.get(ref)
+
+
 def _project_root() -> Path | None:
     """Return project root (directory containing docker/ and Dockerfiles), or None."""
     # Prefer cwd so "uv run --directory /path/to/coala-runtime" or running from

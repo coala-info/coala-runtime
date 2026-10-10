@@ -8,6 +8,7 @@ import docker
 from docker.errors import DockerException, ImageNotFound
 from docker.types import DeviceRequest
 
+from coala_runtime.runtime.docker_images import registry_source_for
 from coala_runtime.runtime.engine import host_container_user, merge_container_environment
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,11 @@ class ContainerManager:
         ``docker.containers.create`` fails with 404 when the image only exists on a
         remote registry (e.g. quay.io/biocontainers/...). This matches ``docker run``
         behavior, which pulls missing images by default.
+
+        An executor tag is a local name no registry serves, so pulling it verbatim 404s on a
+        host where ``coala-runtime build`` / ``pull`` never ran. For those, fetch the published
+        source and retag it locally — what ``ensure_images`` does — so the image keeps the one
+        name every caller and ``uses_default_coala_image`` expect.
         """
         loop = asyncio.get_event_loop()
 
@@ -47,10 +53,22 @@ class ContainerManager:
             try:
                 self.client.images.get(image)
                 logger.debug("Docker image present locally: %s", image)
+                return
             except ImageNotFound:
+                pass
+            source = registry_source_for(image)
+            if source is None:
                 logger.info("Docker image not found locally, pulling: %s", image)
                 self.client.images.pull(image)
                 logger.info("Pulled Docker image: %s", image)
+                return
+            logger.info("Executor image %s not present, pulling %s", image, source)
+            self.client.images.pull(source)
+            repo, _, tag = image.rpartition(":")
+            if not repo:
+                repo, tag = image, "latest"
+            self.client.api.tag(source, repo, tag=tag)
+            logger.info("Pulled %s and tagged it as %s", source, image)
 
         await loop.run_in_executor(None, _ensure)
 
