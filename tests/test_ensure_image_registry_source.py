@@ -55,3 +55,53 @@ def test_an_image_already_present_is_not_fetched():
     asyncio.run(manager.ensure_image("coala-runtime-python:latest"))
     client.images.pull.assert_not_called()
     client.api.tag.assert_not_called()
+
+
+def test_the_xcrunner_manager_is_handed_the_mapping(monkeypatch):
+    """xcrunner imports nothing from coala-runtime, so the mapping is passed in."""
+    import sys
+    import types
+
+    from coala_runtime.runtime import engine as engine_mod
+
+    seen = {}
+
+    class _FakeManager:
+        def __init__(self, *_a, registry_source=None, **_kw):
+            seen["registry_source"] = registry_source
+
+    mod = types.ModuleType("xcodon_runtime.coala_adapter")
+    mod.XcodonContainerManager = _FakeManager
+    pkg = types.ModuleType("xcodon_runtime")
+    monkeypatch.setitem(sys.modules, "xcodon_runtime", pkg)
+    monkeypatch.setitem(sys.modules, "xcodon_runtime.coala_adapter", mod)
+    monkeypatch.setattr(engine_mod, "get_engine_from_env",
+                        lambda: engine_mod.ContainerEngine.XCRUNNER)
+
+    engine_mod.make_container_manager()
+    assert seen["registry_source"] is registry_source_for
+
+
+def test_an_older_xcrunner_without_the_parameter_still_works(monkeypatch):
+    import sys
+    import types
+
+    from coala_runtime.runtime import engine as engine_mod
+
+    built = []
+
+    class _OldManager:
+        def __init__(self, *_a, **_kw):
+            if "registry_source" in _kw:
+                raise TypeError("unexpected keyword argument 'registry_source'")
+            built.append(True)
+
+    mod = types.ModuleType("xcodon_runtime.coala_adapter")
+    mod.XcodonContainerManager = _OldManager
+    monkeypatch.setitem(sys.modules, "xcodon_runtime", types.ModuleType("xcodon_runtime"))
+    monkeypatch.setitem(sys.modules, "xcodon_runtime.coala_adapter", mod)
+    monkeypatch.setattr(engine_mod, "get_engine_from_env",
+                        lambda: engine_mod.ContainerEngine.XCRUNNER)
+
+    engine_mod.make_container_manager()
+    assert built == [True]

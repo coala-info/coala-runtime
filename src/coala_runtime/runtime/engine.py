@@ -246,7 +246,17 @@ def make_container_manager():
     if engine == ContainerEngine.XCRUNNER:
         from xcodon_runtime.coala_adapter import XcodonContainerManager
 
-        return XcodonContainerManager()
+        from coala_runtime.runtime.docker_images import registry_source_for
+
+        # xcrunner imports nothing from coala-runtime, so the executor-tag mapping is handed
+        # to it rather than looked up there. Without it an absent ``coala-runtime-python``
+        # is fetched verbatim and resolves to ``docker.io/library/…``, which serves no such
+        # image. An older xcrunner without the parameter keeps its previous behaviour.
+        try:
+            return XcodonContainerManager(registry_source=registry_source_for)
+        except TypeError:
+            logger.debug("xcrunner adapter takes no registry_source; using it as is")
+            return XcodonContainerManager()
 
     from coala_runtime.runtime.singularity_container_manager import SingularityContainerManager
 
