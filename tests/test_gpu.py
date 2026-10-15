@@ -91,7 +91,7 @@ def test_singularity_instance_start_adds_nv_flag(monkeypatch):
     assert start[1:3] == ["instance", "start"]
     assert "--nv" in start
     # --nv must come before the image URI
-    assert start.index("--nv") < start.index("docker://hubentu/coala-runtime-python:latest")
+    assert start.index("--nv") < start.index("docker://ghcr.io/coala-info/coala-runtime-python:latest")
 
 
 def test_singularity_instance_start_without_gpu_has_no_nv(monkeypatch):

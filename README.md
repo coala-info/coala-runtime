@@ -40,7 +40,7 @@ Executor images (used by the MCP tools):
 
 ```bash
 coala-runtime          # build missing images, then start MCP server
-coala-runtime --pull   # pull hubentu/* from Docker Hub, retag as coala-runtime-*:latest
+coala-runtime --pull   # pull ghcr.io/coala-info/* , retag as coala-runtime-*:latest
 coala-runtime --build  # force rebuild, then start
 coala-runtime build    # build only (no MCP server)
 ```

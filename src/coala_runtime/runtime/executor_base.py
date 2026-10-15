@@ -39,7 +39,7 @@ def _elapsed_s(start: float) -> str:
 def uses_default_coala_image(image: str, default_image: str) -> bool:
     """True if *image* is the default Coala tag, with or without ``:latest``.
 
-    ``coala-runtime-python`` and ``hubentu/coala-runtime-python:latest`` both match
+    ``coala-runtime-python`` and ``ghcr.io/coala-info/coala-runtime-python:latest`` both match
     ``coala-runtime-python:latest``.
     """
     def _name_tag(ref: str) -> tuple[str, str]:

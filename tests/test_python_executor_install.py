@@ -141,7 +141,13 @@ def test_untagged_default_image_uses_uv_like_latest():
     assert "statsmodels" in cmd
 
 
-def test_hub_default_image_is_still_default():
+def test_ghcr_default_image_is_still_default():
+    ex = PythonExecutor(image="ghcr.io/coala-info/coala-runtime-python:latest")
+    assert ex._uses_default_coala_image()
+    assert ex.pip_packages_to_install(["numpy", "statsmodels"]) == ["statsmodels"]
+
+
+def test_legacy_hub_default_image_is_still_default():
     ex = PythonExecutor(image="hubentu/coala-runtime-python:latest")
     assert ex._uses_default_coala_image()
     assert ex.pip_packages_to_install(["numpy", "statsmodels"]) == ["statsmodels"]

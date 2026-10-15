@@ -28,6 +28,7 @@ def test_registry_source_maps_only_executor_tags():
     assert registry_source_for("coala-runtime-r:latest") == REGISTRY_PULL_IMAGES[
         "coala-runtime-r:latest"]
     # Already qualified, third-party, and empty references are left alone.
+    assert registry_source_for("ghcr.io/coala-info/coala-runtime-python:latest") is None
     assert registry_source_for("hubentu/coala-runtime-python:latest") is None
     assert registry_source_for("quay.io/biocontainers/samtools:1.19") is None
     assert registry_source_for("python:3.12-slim") is None
@@ -37,9 +38,9 @@ def test_registry_source_maps_only_executor_tags():
 def test_a_missing_executor_tag_pulls_its_source_and_retags():
     manager, client = _manager_missing_image()
     asyncio.run(manager.ensure_image("coala-runtime-python:latest"))
-    client.images.pull.assert_called_once_with("hubentu/coala-runtime-python:latest")
+    client.images.pull.assert_called_once_with("ghcr.io/coala-info/coala-runtime-python:latest")
     client.api.tag.assert_called_once_with(
-        "hubentu/coala-runtime-python:latest", "coala-runtime-python", tag="latest")
+        "ghcr.io/coala-info/coala-runtime-python:latest", "coala-runtime-python", tag="latest")
 
 
 def test_a_missing_third_party_image_is_pulled_verbatim():

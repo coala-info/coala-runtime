@@ -20,10 +20,11 @@ EXECUTOR_IMAGES = [
     "coala-runtime-r:latest",
 ]
 
-# Docker Hub sources for ``coala-runtime --pull`` (retagged to EXECUTOR_IMAGES locally).
+# Registry sources for ``coala-runtime --pull`` (retagged to EXECUTOR_IMAGES locally).
+# Published by .github/workflows/docker-images.yml on every v* tag.
 REGISTRY_PULL_IMAGES = {
-    "coala-runtime-python:latest": "hubentu/coala-runtime-python:latest",
-    "coala-runtime-r:latest": "hubentu/coala-runtime-r:latest",
+    "coala-runtime-python:latest": "ghcr.io/coala-info/coala-runtime-python:latest",
+    "coala-runtime-r:latest": "ghcr.io/coala-info/coala-runtime-r:latest",
 }
 
 # Backwards-compatible alias
@@ -31,7 +32,7 @@ PULL_IMAGES = list(REGISTRY_PULL_IMAGES.values())
 
 
 def registry_source_for(image: str) -> str | None:
-    """The Docker Hub source for a local executor tag, or ``None`` for anything else.
+    """The registry source for a local executor tag, or ``None`` for anything else.
 
     ``coala-runtime-python:latest`` is a *local* tag: ``docker/build.sh`` produces it and
     ``coala-runtime pull`` retags :data:`REGISTRY_PULL_IMAGES` onto it. Nothing publishes it
@@ -84,7 +85,7 @@ def _executor_images_present(client) -> bool:
 
 
 def _pull_image(client, local_tag: str) -> None:
-    """Pull from Docker Hub and tag locally (drops ``hubentu/`` namespace)."""
+    """Pull from the registry and tag locally (drops the ``ghcr.io/coala-info/`` prefix)."""
     registry_tag = REGISTRY_PULL_IMAGES.get(local_tag, local_tag)
     logger.info("Pulling %s from %s...", local_tag, registry_tag)
     client.images.pull(registry_tag)
@@ -128,7 +129,7 @@ def ensure_images(*, pull: bool = False, force_build: bool = False) -> None:
     """Ensure executor images exist before starting the MCP server.
 
     Default (Docker/Podman): build locally via ``docker/build.sh`` when either image is
-    missing. Use ``pull=True`` (``coala-runtime --pull``) to fetch from Docker Hub instead.
+    missing. Use ``pull=True`` (``coala-runtime --pull``) to fetch from GHCR instead.
     Use ``force_build=True`` (``coala-runtime --build``) to rebuild even when images exist.
 
     Singularity/Apptainer: images resolve on first execution; this function is a no-op.
@@ -177,7 +178,7 @@ def ensure_images(*, pull: bool = False, force_build: bool = False) -> None:
         else:
             logger.info(
                 "Executor image(s) missing locally; building via docker/build.sh "
-                "(use --pull to fetch pre-built images from Docker Hub instead)"
+                "(use --pull to fetch pre-built images from ghcr.io instead)"
             )
         try:
             build_executor_images()

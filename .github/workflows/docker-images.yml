@@ -1,0 +1,175 @@
+name: Docker images
+
+# Builds the Python and R executor images and publishes them to the GitHub
+# Container Registry as ghcr.io/<owner>/coala-runtime-python and
+# ghcr.io/<owner>/coala-runtime-r.
+#
+#   v* tag          -> linux/amd64 + linux/arm64, tags :<version> and :latest
+#   workflow_dispatch -> linux/amd64 + linux/arm64, tag :latest, from the chosen ref
+#   pull_request    -> linux/amd64 only, build check, nothing pushed
+#
+# Each platform builds on a native runner (no QEMU) and pushes by digest; the
+# merge job then stitches the digests into one multi-arch manifest per image.
+# No secrets are needed: the built-in GITHUB_TOKEN can write packages.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "docker/**"
+      - ".github/workflows/docker-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [python, r]
+        platform: ${{ fromJSON(github.event_name == 'pull_request' && '["linux/amd64"]' || '["linux/amd64", "linux/arm64"]') }}
+    outputs:
+      namespace: ${{ steps.names.outputs.namespace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          test "${TAG#v}" = "$version" || { echo "tag $TAG does not match version $version"; exit 1; }
+
+      # Registry names must be lower case; the repository owner may not be.
+      - name: Compute image names
+        id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE: ${{ matrix.image }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          namespace="${OWNER,,}"
+          {
+            echo "namespace=$namespace"
+            echo "name=$REGISTRY/$namespace/coala-runtime-$IMAGE"
+            echo "platform_slug=${PLATFORM//\//-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (pull request check, not pushed)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.${{ matrix.image }}
+          platforms: ${{ matrix.platform }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.names.outputs.platform_slug }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.names.outputs.platform_slug }}
+
+      - name: Build and push by digest
+        if: github.event_name != 'pull_request'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.${{ matrix.image }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,"name=${{ steps.names.outputs.name }}",push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.names.outputs.platform_slug }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.names.outputs.platform_slug }}
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ steps.names.outputs.platform_slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish ${{ matrix.image }} manifest
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [python, r]
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # On a v1.2.3 tag: 1.2.3 and latest. On workflow_dispatch: latest only.
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ needs.build.outputs.namespace }}/coala-runtime-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - name: Create the multi-arch manifest
+        working-directory: /tmp/digests
+        env:
+          NAME: ${{ env.REGISTRY }}/${{ needs.build.outputs.namespace }}/coala-runtime-${{ matrix.image }}
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$NAME@sha256:%s " *)
+
+      - name: Inspect the published image
+        env:
+          NAME: ${{ env.REGISTRY }}/${{ needs.build.outputs.namespace }}/coala-runtime-${{ matrix.image }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "$NAME:$VERSION"

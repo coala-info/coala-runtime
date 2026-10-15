@@ -24,7 +24,7 @@ Run the Coala Runtime MCP server over stdio (tools: coala_python_executor, coala
 
   --build          Rebuild executor images, then start the MCP server (even if already present)
 
-  --pull           Pull missing images from Docker Hub (hubentu/*), retagged locally
+  --pull           Pull missing images from ghcr.io/coala-info/*, retagged locally
 
   --engine NAME    Container runtime: overrides COALA_CONTAINER_ENGINE for this process.
                    If neither is set, the server auto-detects (Docker if the daemon works,

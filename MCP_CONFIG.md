@@ -18,9 +18,9 @@ This document explains how to configure the Coala Runtime MCP server in various 
 
    - **Podman**: docker-py talks to the Podman socket. Set `DOCKER_HOST` if needed (e.g. `unix:///run/user/$UID/podman/podman.sock`).
    - **xcrunner**: rootless runtime with no daemon (the xcrunner package); install with `pip install 'coala-runtime[xcrunner]'`; autodetected when Docker and Podman are unavailable.
-   - **Singularity / Apptainer**: uses the CLI (`singularity` or `apptainer`). Default images such as `coala-runtime-python:latest` are run as `docker://hubentu/coala-runtime-python:latest` when pulled from Docker Hub. Proactive image setup at server start is skipped; the first execution pulls/caches the image.
+   - **Singularity / Apptainer**: uses the CLI (`singularity` or `apptainer`). Default images such as `coala-runtime-python:latest` are run as `docker://ghcr.io/coala-info/coala-runtime-python:latest` when pulled from the GitHub Container Registry. Proactive image setup at server start is skipped; the first execution pulls/caches the image.
 
-2. **Executor images (Docker/Podman):** on first start, `coala-runtime` builds `coala-runtime-python:latest` and `coala-runtime-r:latest` locally if they are missing (requires MCP `cwd` pointing at this repo). To fetch pre-built images from Docker Hub instead, pass **`--pull`** (pulls `hubentu/coala-runtime-*` and retags locally):
+2. **Executor images (Docker/Podman):** on first start, `coala-runtime` builds `coala-runtime-python:latest` and `coala-runtime-r:latest` locally if they are missing (requires MCP `cwd` pointing at this repo). To fetch pre-built images from the GitHub Container Registry instead, pass **`--pull`** (pulls `ghcr.io/coala-info/coala-runtime-*` and retags locally):
 
    ```json
    "args": ["--pull"]
@@ -214,7 +214,7 @@ Public images do not need a login. Apptainer often fails this way if **stale Doc
 - **Workaround:** pull once where pulls work, then point Coala at the file:
 
   ```bash
-  apptainer pull "$HOME/containers/coala-python.sif" docker://hubentu/coala-runtime-python:latest
+  apptainer pull "$HOME/containers/coala-python.sif" docker://ghcr.io/coala-info/coala-runtime-python:latest
   ```
 
   Pass **`docker_image`** as the absolute path to that `.sif` (do not use `docker://` for local files).

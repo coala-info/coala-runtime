@@ -76,6 +76,23 @@ docker build --build-arg BIOC_DOCKER_TAG=RELEASE_3_22 -f docker/Dockerfile.r -t 
 - **Default Package**: tidyverse (installed in Dockerfile)
 - **Directories**: `/workspace`, `/input`, `/output`
 
+## Published Images (GitHub Actions)
+
+`.github/workflows/docker-images.yml` builds both images and publishes them to the GitHub Container Registry:
+
+| Image | Registry name |
+|-------|---------------|
+| Python | `ghcr.io/coala-info/coala-runtime-python` |
+| R | `ghcr.io/coala-info/coala-runtime-r` |
+
+Triggers:
+
+- **Tag `v*`**: builds `linux/amd64` and `linux/arm64` on native runners and pushes `:<version>` and `:latest`. The tag must match the version in `pyproject.toml`.
+- **Manual run** (`gh workflow run docker-images.yml`): pushes `:latest` from the chosen ref.
+- **Pull requests** touching `docker/**` or the workflow: builds `linux/amd64` only, without pushing.
+
+No secrets are needed; the workflow authenticates with the built-in `GITHUB_TOKEN`. After the first push, open each package on GitHub (Packages → coala-runtime-python / coala-runtime-r → Package settings) and set its visibility to **Public** so `coala-runtime --pull` works without a login.
+
 ## Usage
 
 These images are automatically used by the Coala Runtime MCP server when executing Python or R scripts. The images are designed to:

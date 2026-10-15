@@ -308,7 +308,7 @@ def _handle_execution_error(e: Exception, operation: str) -> ExecutionResultOutp
             "SINGULARITY_DOCKER_* / APPTAINER_DOCKER_* env vars often cause this. "
             "Try: remove docker.io from auths in ~/.docker/config.json, "
             "`docker logout`, or `apptainer registry logout docker.io`. "
-            "Or pull once to a file: `apptainer pull /path/coala-python.sif docker://hubentu/coala-runtime-python:latest` "
+            "Or pull once to a file: `apptainer pull /path/coala-python.sif docker://ghcr.io/coala-info/coala-runtime-python:latest` "
             "and pass that absolute path as `docker_image` (no docker:// prefix). "
             "See MCP_CONFIG.md (Singularity troubleshooting)."
         )
