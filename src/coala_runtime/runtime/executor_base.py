@@ -1,6 +1,7 @@
 """Base executor class for script execution."""
 
 import asyncio
+import socket
 import base64
 import inspect
 import logging
@@ -15,6 +16,19 @@ from coala_runtime.runtime.file_handler import FileHandler
 from coala_runtime.utils.output_parser import OutputParser
 
 logger = logging.getLogger(__name__)
+
+
+def _describe_engine(manager, container) -> str:
+    """The manager's own description of a container's engine, else the manager's name."""
+    describe = getattr(manager, "describe_container", None)
+    if callable(describe):
+        try:
+            text = str(describe(container) or "").strip()
+            if text:
+                return text
+        except Exception:  # noqa: BLE001 - a log line must never fail the run
+            logger.debug("describe_container failed", exc_info=True)
+    return type(manager).__name__
 
 
 def _elapsed_s(start: float) -> str:
@@ -299,6 +313,10 @@ class BaseExecutor(ABC):
             execution_logs.append("\n[RUNTIME]")
             execution_logs.append(f"{_elapsed_s(start_time)} Job started")
             execution_logs.append(f"Image: {self.image}")
+            # Which engine ran the container, and on which node: a failure that depends on
+            # either could not be traced from the log before.
+            execution_logs.append(f"Engine: {_describe_engine(self.container_manager, container)}")
+            execution_logs.append(f"Host: {socket.gethostname()}")
             execution_logs.append(f"Host output directory (mounted at /output): {self.output_dir}")
             execution_logs.append(
                 f"Script timeout: {timeout}s" + (" (no limit)" if timeout == 0 else "")

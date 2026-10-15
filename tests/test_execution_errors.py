@@ -18,3 +18,23 @@ def test_generic_singularity_error_still_helpful():
     err = Exception("apptainer exec failed: no such instance")
     out = _handle_execution_error(err, "run")
     assert "singularity" in out.stderr.lower() or "apptainer" in out.stderr.lower()
+
+
+def test_describe_engine_uses_the_managers_own_description():
+    """The execution log names the engine; xcrunner's manager says which one and where."""
+    from coala_runtime.runtime.executor_base import _describe_engine
+
+    class Described:
+        def describe_container(self, container):
+            return "xcrunner 0.1.6 · engine ns · container dir /tmp/x"
+
+    class Plain:
+        pass
+
+    class Broken:
+        def describe_container(self, container):
+            raise RuntimeError("no")
+
+    assert _describe_engine(Described(), object()) == "xcrunner 0.1.6 · engine ns · container dir /tmp/x"
+    assert _describe_engine(Plain(), object()) == "Plain"
+    assert _describe_engine(Broken(), object()) == "Broken"
