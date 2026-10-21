@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from coala_runtime.tools.python_executor import PythonExecutor
 from coala_runtime.tools.r_executor import RExecutor
@@ -28,8 +28,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create MCP server using FastMCP
-mcp = FastMCP("coala_runtime_mcp")
+# Create MCP server using MCPServer (mcp 2; FastMCP in mcp 1)
+mcp = MCPServer("coala_runtime_mcp")
 
 
 # Pydantic Models for Input Validation
