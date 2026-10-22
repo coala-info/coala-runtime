@@ -233,22 +233,23 @@ class PythonExecutor(BaseExecutor):
         if packages_to_install:
             package_list = " ".join(shlex.quote(p) for p in packages_to_install)
             prefix_arg = shlex.quote(_SINGULARITY_PIP_PREFIX)
+            target = f"--prefix {prefix_arg} " if self._use_workspace_pip_prefix() else ""
+            pip_only = (
+                "python -m pip install --no-cache-dir --root-user-action=ignore "
+                f"{target}{package_list}"
+            )
             if self._install_uses_uv():
-                if self._use_workspace_pip_prefix():
-                    pip_cmd = f"uv pip install --prefix {prefix_arg} {package_list}"
-                else:
-                    pip_cmd = f"uv pip install --system {package_list}"
+                uv_cmd = f"uv pip install {target or '--system '}{package_list}"
+                # pip when uv fails. Under udocker's Fakechroot, uv's raw renameat2 for its cache
+                # lock escapes the path mapping, and every uv install failed with "Could not
+                # persist temporary file ... Permission denied"; pip, pure Python, works there.
+                # Slower, never failed: the retry costs one failed uv attempt.
+                pip_cmd = (
+                    f"({uv_cmd} || (echo 'uv pip install failed, retrying with pip' >&2; "
+                    f"{pip_only}))"
+                )
             else:
-                if self._use_workspace_pip_prefix():
-                    pip_cmd = (
-                        "python -m pip install --no-cache-dir --root-user-action=ignore "
-                        f"--prefix {prefix_arg} {package_list}"
-                    )
-                else:
-                    pip_cmd = (
-                        "python -m pip install --no-cache-dir --root-user-action=ignore "
-                        f"{package_list}"
-                    )
+                pip_cmd = pip_only
         else:
             pip_cmd = ""
 

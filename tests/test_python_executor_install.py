@@ -181,3 +181,38 @@ def test_singularity_like_custom_image_uses_pip_prefix():
     assert "--prefix /output/.coala-runtime/pip-prefix" in cmd
     assert "statsmodels" in cmd
     assert "export" not in cmd
+
+
+def test_a_failed_uv_install_is_retried_with_pip():
+    """Under udocker's Fakechroot, uv's raw rename of its cache lock escapes the path mapping and
+    every uv install failed ("Could not persist temporary file ... Permission denied")."""
+    ex = PythonExecutor(container_manager=_RootLikeManager())
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["h5py"])
+    assert cmd.startswith("(uv pip install --system ") and "h5py" in cmd
+    assert "|| (echo 'uv pip install failed, retrying with pip' >&2; " in cmd
+    assert "python -m pip install --no-cache-dir --root-user-action=ignore h5py" in cmd
+    prefixed = PythonExecutor(container_manager=_SingularityLikeManager())
+    cmd = prefixed.get_install_command(prefixed.DEFAULT_PACKAGES + ["h5py"])
+    assert cmd.count("--prefix /output/.coala-runtime/pip-prefix") == 2, "both tries share a target"
+
+
+def test_the_fallback_runs_pip_only_when_uv_fails(tmp_path):
+    import subprocess
+
+    ex = PythonExecutor(container_manager=_RootLikeManager())
+    cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["h5py"])
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "calls"
+    for name, code in (("uv", 1), ("python", 0)):
+        tool = bin_dir / name
+        tool.write_text(f"#!/bin/sh\necho {name} \"$@\" >> {log}\nexit {code}\n")
+        tool.chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin"}
+    r = subprocess.run(["sh", "-c", cmd], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and "retrying with pip" in r.stderr
+    assert [line.split()[0] for line in log.read_text().splitlines()] == ["uv", "python"]
+    (bin_dir / "uv").write_text(f"#!/bin/sh\necho uv \"$@\" >> {log}\nexit 0\n")
+    log.unlink()
+    r = subprocess.run(["sh", "-c", cmd], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and [line.split()[0] for line in log.read_text().splitlines()] == ["uv"]
