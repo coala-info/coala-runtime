@@ -216,3 +216,8 @@ def test_the_fallback_runs_pip_only_when_uv_fails(tmp_path):
     log.unlink()
     r = subprocess.run(["sh", "-c", cmd], env=env, capture_output=True, text=True)
     assert r.returncode == 0 and [line.split()[0] for line in log.read_text().splitlines()] == ["uv"]
+
+
+def test_default_python_image_includes_excel_support():
+    assert "openpyxl" in PythonExecutor.DEFAULT_PACKAGES  # .xlsx read/write
+    assert "xlrd" in PythonExecutor.DEFAULT_PACKAGES  # legacy .xls read

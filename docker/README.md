@@ -66,14 +66,14 @@ docker build --build-arg BIOC_DOCKER_TAG=RELEASE_3_22 -f docker/Dockerfile.r -t 
 
 - **Base**: `python:3.12-slim` (multi-arch: amd64, arm64)
 - **Package Manager**: `uv` (installed from official installer)
-- **Default Packages**: numpy, pandas, scipy, matplotlib, scikit-learn, seaborn
+- **Default Packages**: numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd
 - **Directories**: `/workspace`, `/input`, `/output`
 
 ### R Image (`coala-runtime-r`)
 
 - **Base**: `bioconductor/bioconductor_docker:RELEASE_3_23` (multi-arch: amd64, arm64)
 - **Package Manager**: `BiocManager::install()` for CRAN and Bioconductor packages at runtime (binary installs)
-- **Default Package**: tidyverse (installed in Dockerfile)
+- **Default Packages**: tidyverse, readxl, writexl (installed in Dockerfile)
 - **Directories**: `/workspace`, `/input`, `/output`
 
 ## Published Images (GitHub Actions)

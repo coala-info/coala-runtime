@@ -16,7 +16,7 @@ class RExecutor(BaseExecutor):
 
     DEFAULT_IMAGE = "coala-runtime-r:latest"
     # Pre-installed in the default image; skip installing when user requests them
-    DEFAULT_PACKAGES: List[str] = ["tidyverse"]
+    DEFAULT_PACKAGES: List[str] = ["tidyverse", "readxl", "writexl"]
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class RExecutor(BaseExecutor):
         return []
 
     def compose_install_package_list(self, user_packages: List[str]) -> List[str]:
-        """Custom images: only user-listed packages (no assumed tidyverse)."""
+        """Custom images: only user-listed packages (no assumed tidyverse/readxl/writexl)."""
         if self._uses_default_coala_image():
             return self.get_default_packages() + user_packages
         return list(user_packages)

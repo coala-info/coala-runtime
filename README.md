@@ -10,7 +10,7 @@ An MCP (Model Context Protocol) server for executing Python and R scripts in con
   - R: Based on `bioconductor/bioconductor_docker` (BiocManager for CRAN and Bioconductor packages)
 - **File Mounting**: Bind-mount local files and directories into containers
 - **GPU Passthrough**: Opt-in NVIDIA GPU access per call (`gpu: true`) or globally (`COALA_GPU=1`) — see [MCP_CONFIG.md](MCP_CONFIG.md)
-- **Pre-installed packages**: Python image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn; R image includes tidyverse
+- **Pre-installed packages**: Python image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd; R image includes tidyverse, readxl, writexl
 - **MCP Integration**: Exposes `coala_python_executor` and `coala_r_executor` tools for LLM interaction
 
 ## Prerequisites
@@ -81,7 +81,7 @@ Executes Python scripts in a containerized environment with uv package managemen
 
 **Input:**
 - `script` or `script_file` (one required): Inline Python code or host path to a `.py` file
-- `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn. Can include version specifiers (e.g., 'requests>=2.31.0')
+- `packages` (optional): Additional packages to install via uv. The image already includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd. Can include version specifiers (e.g., 'requests>=2.31.0')
 - `conda_packages` (optional, Python only): Conda specs installed before pip/uv (requires conda/mamba in the image)
 - `docker_image` (optional): Docker image to run instead of the default Coala Python image (e.g. `python:3.12-slim`, `quay.io/biocontainers/...`)
 - `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
@@ -105,7 +105,7 @@ Executes R scripts in a containerized environment with Bioconductor Docker (Bioc
 
 **Input:**
 - `script` or `script_file` (one required): Inline R code or host path to an `.R` file
-- `packages` (optional): Additional R packages to install. Use 'bioc::package_name' format for Bioconductor packages. The image already includes tidyverse. Examples: ['ggplot2', 'dplyr', 'bioc::Biobase']
+- `packages` (optional): Additional R packages to install. Use 'bioc::package_name' format for Bioconductor packages. The image already includes tidyverse, readxl, writexl. Examples: ['ggplot2', 'dplyr', 'bioc::Biobase']
 - `docker_image` (optional): Docker image to run instead of the default Coala R image (must provide `Rscript` on `PATH`)
 - `skip_package_install` (optional): If `true`, skip install step (typical when `docker_image` already has all dependencies)
 - `input_files` (optional): Map of container paths to host paths for bind-mounting (e.g., {'/input/data.csv': '/host/path/data.csv'})

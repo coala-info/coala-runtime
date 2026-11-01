@@ -10,7 +10,7 @@ This directory contains test scripts that can be executed using the Coala Runtim
 Creates a boxplot visualization using matplotlib with sample data.
 
 **Usage:**
-- Packages: None (uses default: numpy, pandas, scipy, matplotlib, scikit-learn, seaborn)
+- Packages: None (uses default: numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd)
 - Output: `boxplot_demo.png` in `/output/` directory
 
 #### `test_pdf_extraction.py`

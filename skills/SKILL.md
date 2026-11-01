@@ -32,8 +32,8 @@ Replace `/path/to/coala-runtime` with the real path. Restart the client; tools `
 
 | Tool | Use for |
 |------|--------|
-| `coala_python_executor` | Python scripts (uv for packages; image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn). |
-| `coala_r_executor` | R scripts (CRAN + Bioconductor via `bioc::package_name`; image includes tidyverse). |
+| `coala_python_executor` | Python scripts (uv for packages; image includes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd). |
+| `coala_r_executor` | R scripts (CRAN + Bioconductor via `bioc::package_name`; image includes tidyverse, readxl, writexl). |
 
 Use **one** of `script` (code string) or `script_file` (host path to script). Prefer `script_file` when the script is long or has encoding/special characters to avoid serialization issues.
 
@@ -50,7 +50,7 @@ Use **one** of `script` (code string) or `script_file` (host path to script). Pr
 
 ## Python: `coala_python_executor`
 
-- **Pre-installed:** numpy, pandas, scipy, matplotlib, scikit-learn, seaborn (do not reinstall).
+- **Pre-installed:** numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd (do not reinstall).
 - **packages:** List of names; version specifiers allowed, e.g. `["statsmodels", "requests>=2.31.0"]`. Installed with `uv pip install --system` on the default image; on a custom **docker_image**, installs use `pip` unless `skip_package_install` is true.
 - **conda_packages** (optional): Conda-only specs (e.g. `["samtools"]`); requires conda/mamba in **docker_image** when used.
 - **Execution:** Script runs in container as `python /workspace/script.py`; working directory is `/workspace`.
@@ -68,7 +68,7 @@ Example (conceptual):
 
 ## R: `coala_r_executor`
 
-- **Pre-installed:** tidyverse (do not reinstall).
+- **Pre-installed:** tidyverse, readxl, writexl (do not reinstall).
 - **packages:** CRAN or Bioconductor names; use `"bioc::PackageName"` for Bioconductor if you like. All install via `BiocManager::install` (binaries). Example: `["ggplot2", "dplyr", "bioc::Biobase", "bioc::limma"]`. On a custom **docker_image**, list everything you need unless `skip_package_install` is true.
 - **Execution:** Script runs as `Rscript /workspace/script.R`; working directory is `/workspace`.
 

@@ -59,7 +59,7 @@ class PythonExecutorInput(BaseModel):
             "On the default Coala image, installs use uv; on a custom `docker_image`, `python -m pip install` is used. "
             "For conda-only / non-Python dependencies, use the `conda_packages` field or prefix `conda::` "
             "(e.g. `conda::samtools`); those install via conda/mamba before pip. "
-            "On the default Coala image, numpy/pandas/scipy/matplotlib/scikit-learn/seaborn are assumed pre-installed and omitted from pip installs; "
+            "On the default Coala image, numpy/pandas/scipy/matplotlib/scikit-learn/seaborn/openpyxl/xlrd are assumed pre-installed and omitted from pip installs; "
             "with a custom `docker_image`, nothing is assumed—list every pip package you need. "
             "On custom images, packages already installed in the container (via ``pip show``) are skipped automatically. "
             "Examples: ['statsmodels', 'plotly', 'requests>=2.31.0']"
@@ -175,7 +175,7 @@ class RExecutorInput(BaseModel):
         default_factory=list,
         description=(
             "Additional R packages to install. Use 'bioc::package_name' for Bioconductor. "
-            "On the default Coala image, tidyverse is assumed pre-installed; with a custom `docker_image`, list all CRAN/Bioc packages to install. "
+            "On the default Coala image, tidyverse, readxl, and writexl are assumed pre-installed; with a custom `docker_image`, list all CRAN/Bioc packages to install. "
             "On custom images, packages whose R namespaces already exist are skipped automatically. "
             "Examples: ['ggplot2', 'dplyr', 'bioc::Biobase', 'bioc::limma']"
         ),
@@ -380,7 +380,7 @@ async def coala_python_executor(
     - Dynamic package installation: uv on the default Coala image, pip on a custom `docker_image`
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
-    - Default Coala image assumes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn are pre-installed; custom `docker_image` does not
+    - Default Coala image assumes numpy, pandas, scipy, matplotlib, scikit-learn, seaborn, openpyxl, xlrd are pre-installed; custom `docker_image` does not
     - Custom `docker_image`: probes the running container and skips pip packages already installed
 
     Args:
@@ -390,7 +390,7 @@ async def coala_python_executor(
             - script_file (str): Path to Python script file to execute (either script or script_file must be provided).
               Prefer using script_file when possible, especially if script parameter fails.
             - packages (Optional[List[str]]): Packages to install (uv on default image, pip on custom `docker_image`).
-              On the default image numpy/pandas/scipy/matplotlib/scikit-learn/seaborn are skipped for install; on custom `docker_image`, list all pip deps.
+              On the default image numpy/pandas/scipy/matplotlib/scikit-learn/seaborn/openpyxl/xlrd are skipped for install; on custom `docker_image`, list all pip deps.
               Can include version specifiers (e.g., 'requests>=2.31.0').
               Use `conda::spec` for conda-only / non-Python deps (installed before pip).
             - conda_packages (Optional[List[str]]): Conda specs installed before pip/uv (requires conda or mamba in the image).
@@ -581,7 +581,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
     - Dynamic package installation from CRAN and Bioconductor (via BiocManager)
     - File mounting for input/output data
     - Automatic output parsing (files, images, text output)
-    - Default Coala image includes tidyverse (assumed pre-installed for install planning); custom `docker_image` does not
+    - Default Coala image includes tidyverse, readxl, writexl (assumed pre-installed for install planning); custom `docker_image` does not
     - Custom `docker_image`: probes R namespaces and skips packages already installed
 
     Args:
@@ -591,7 +591,7 @@ async def coala_r_executor(params: Union[RExecutorInput, dict, str]) -> Executio
             - script_file (str): Path to R script file to execute (either script or script_file must be provided).
               Prefer using script_file when possible, especially if script parameter fails.
             - packages (Optional[List[str]]): R packages to install (CRAN + bioc:: for Bioconductor).
-              On the default image tidyverse is assumed pre-installed; on a custom `docker_image`, list everything you need.
+              On the default image tidyverse/readxl/writexl are assumed pre-installed; on a custom `docker_image`, list everything you need.
               Examples: ['ggplot2', 'dplyr', 'bioc::Biobase', 'bioc::limma']
             - input_files (Optional[Dict[str, str]]): Map of container paths to host paths
               for bind-mounting files into the container.

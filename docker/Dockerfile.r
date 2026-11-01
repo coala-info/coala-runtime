@@ -11,7 +11,7 @@ RUN mkdir -p /workspace /input /output
 
 WORKDIR /workspace
 
-# tidyverse via BiocManager (uses prebuilt binaries from the Bioconductor/CRAN stack in this image)
-RUN Rscript -e "BiocManager::install('tidyverse', ask = FALSE, update = FALSE)"
+# tidyverse + Excel I/O (readxl, writexl) via BiocManager (prebuilt binaries from the Bioconductor/CRAN stack)
+RUN Rscript -e "BiocManager::install(c('tidyverse', 'readxl', 'writexl'), ask = FALSE, update = FALSE)"
 
 CMD ["Rscript"]
