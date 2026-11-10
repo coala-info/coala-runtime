@@ -157,7 +157,7 @@ class ContainerManager:
 
         Args:
             container: Container to execute command in
-            command: Shell string or argv list (list avoids shell quoting issues)
+            command: Shell string (run with /bin/sh -c) or argv list (run as is)
             workdir: Working directory for command
             environment: Environment variables
 
@@ -172,9 +172,13 @@ class ContainerManager:
                     f"Container {container.id[:12]} is not running (status: {container.status})"
                 )
 
+            # A string is a shell command, as in the Singularity and xcrunner managers.
+            # docker-py would split it on whitespace and exec the first word, so a compound
+            # install command such as "(uv pip install ... || ...)" failed with exit 127.
+            cmd = ["/bin/sh", "-c", command] if isinstance(command, str) else list(command)
             loop = asyncio.get_event_loop()
             exec_kw: dict = {
-                "cmd": command,
+                "cmd": cmd,
                 "workdir": workdir,
                 "environment": merge_container_environment(environment),
                 "stdout": True,
