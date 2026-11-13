@@ -8,6 +8,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from coala_runtime.runtime.executor_base import BaseExecutor, uses_default_coala_image
 
+# The interpreter, found when the command runs. An image built from ubuntu with apt's python3
+# has no ``python``, and every script failed with "python: not found" before it started. With
+# neither on PATH the shell reports "python: not found", as before.
+PYTHON = '"$(command -v python || command -v python3 || echo python)"'
+
+# pip settings as environment variables, which a pip that does not know them ignores. As flags,
+# ubuntu 22.04's pip 22.0 stopped at "no such option: --root-user-action". Ubuntu 24.04 marks
+# apt's Python externally managed (PEP 668) and its pip refused every install; the task images
+# built on it install their own libraries with --break-system-packages, and so do we.
+PIP_ENV = "PIP_ROOT_USER_ACTION=ignore PIP_BREAK_SYSTEM_PACKAGES=1"
+
 logger = logging.getLogger(__name__)
 
 # Writable prefix when the image site-packages are not writable (Singularity, or
@@ -171,15 +182,14 @@ class PythonExecutor(BaseExecutor):
             return []
         env = dict(self.exec_environment())
         env["COALA_PIP_PROBE_JSON"] = json.dumps(pip_names)
-        cmd = [
-            "python",
-            "-c",
+        code = (
             "import json,os,subprocess,sys;"
             "pkgs=json.loads(os.environ['COALA_PIP_PROBE_JSON']);"
             "missing=[p for p in pkgs if subprocess.run([sys.executable,'-m','pip','show',p],"
             "capture_output=True).returncode!=0];"
-            "print(json.dumps(missing))",
-        ]
+            "print(json.dumps(missing))"
+        )
+        cmd = f"{PYTHON} -c {shlex.quote(code)}"
         exit_code, stdout, _ = await self.container_manager.exec_command(
             container, cmd, environment=env
         )
@@ -235,7 +245,7 @@ class PythonExecutor(BaseExecutor):
             prefix_arg = shlex.quote(_SINGULARITY_PIP_PREFIX)
             target = f"--prefix {prefix_arg} " if self._use_workspace_pip_prefix() else ""
             pip_only = (
-                "python -m pip install --no-cache-dir --root-user-action=ignore "
+                f"{PIP_ENV} {PYTHON} -m pip install --no-cache-dir "
                 f"{target}{package_list}"
             )
             if self._install_uses_uv():
@@ -270,7 +280,7 @@ class PythonExecutor(BaseExecutor):
         Returns:
             Execution command
         """
-        return f"python {script_path}"
+        return f"{PYTHON} {script_path}"
 
     def get_default_packages(self) -> List[str]:
         """Get default packages.

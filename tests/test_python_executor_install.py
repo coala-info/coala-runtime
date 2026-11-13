@@ -1,6 +1,6 @@
 """PythonExecutor install command: uv vs pip, conda."""
 
-from coala_runtime.tools.python_executor import PythonExecutor
+from coala_runtime.tools.python_executor import PIP_ENV, PYTHON, PythonExecutor
 
 
 class _SingularityLikeManager:
@@ -28,7 +28,7 @@ def test_custom_image_uses_pip_for_packages():
         container_manager=_RootLikeManager(),
     )
     cmd = ex.get_install_command(["statsmodels"])
-    assert "python -m pip install" in cmd
+    assert f"{PYTHON} -m pip install" in cmd
     assert "statsmodels" in cmd
     assert "uv pip" not in cmd
 
@@ -42,7 +42,7 @@ def test_conda_packages_field_before_pip():
     cmd = ex.get_install_command(["statsmodels"])
     assert "conda install" in cmd or "mamba install" in cmd
     assert "samtools" in cmd
-    assert "python -m pip install" in cmd
+    assert f"{PYTHON} -m pip install" in cmd
     assert "statsmodels" in cmd
     assert " && " in cmd
 
@@ -165,7 +165,7 @@ def test_packages_implied_by_script_maps_bs4():
 def test_singularity_like_execution_sets_pythonpath():
     ex = PythonExecutor(container_manager=_SingularityLikeManager())
     cmd = ex.get_execution_command("/workspace/script.py")
-    assert cmd == "python /workspace/script.py"
+    assert cmd == f"{PYTHON} /workspace/script.py"
     assert "export" not in cmd
     env = ex.exec_environment()
     assert "python3.12/site-packages" in env["PYTHONPATH"]
@@ -177,7 +177,7 @@ def test_singularity_like_custom_image_uses_pip_prefix():
         container_manager=_SingularityLikeManager(),
     )
     cmd = ex.get_install_command(["statsmodels"])
-    assert "python -m pip install" in cmd
+    assert f"{PYTHON} -m pip install" in cmd
     assert "--prefix /output/.coala-runtime/pip-prefix" in cmd
     assert "statsmodels" in cmd
     assert "export" not in cmd
@@ -190,7 +190,7 @@ def test_a_failed_uv_install_is_retried_with_pip():
     cmd = ex.get_install_command(ex.DEFAULT_PACKAGES + ["h5py"])
     assert cmd.startswith("(uv pip install --system ") and "h5py" in cmd
     assert "|| (echo 'uv pip install failed, retrying with pip' >&2; " in cmd
-    assert "python -m pip install --no-cache-dir --root-user-action=ignore h5py" in cmd
+    assert f"{PIP_ENV} {PYTHON} -m pip install --no-cache-dir h5py" in cmd
     prefixed = PythonExecutor(container_manager=_SingularityLikeManager())
     cmd = prefixed.get_install_command(prefixed.DEFAULT_PACKAGES + ["h5py"])
     assert cmd.count("--prefix /output/.coala-runtime/pip-prefix") == 2, "both tries share a target"
@@ -221,3 +221,62 @@ def test_the_fallback_runs_pip_only_when_uv_fails(tmp_path):
 def test_default_python_image_includes_excel_support():
     assert "openpyxl" in PythonExecutor.DEFAULT_PACKAGES  # .xlsx read/write
     assert "xlrd" in PythonExecutor.DEFAULT_PACKAGES  # legacy .xls read
+
+
+def _run_in_sh_with_only_python3(tmp_path, cmd):
+    """Run ``cmd`` through /bin/sh with a PATH that has ``python3`` and no ``python``,
+    as in an ubuntu image with apt's python3 alone."""
+    import subprocess
+    import sys
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "python3").symlink_to(sys.executable)
+    # /bin for sh itself; no python on this PATH unless the test host's /bin has one.
+    env = {"PATH": f"{bindir}:/bin"}
+    return subprocess.run(["/bin/sh", "-c", cmd], env=env, capture_output=True, text=True)
+
+
+def test_a_script_runs_in_an_image_with_python3_alone(tmp_path):
+    script = tmp_path / "script.py"
+    script.write_text("import sys\nprint('ran', sys.version_info[0])\n", encoding="utf-8")
+    ex = PythonExecutor(container_manager=_RootLikeManager())
+    cmd = ex.get_execution_command(str(script))
+    assert not cmd.startswith("python "), cmd
+    out = _run_in_sh_with_only_python3(tmp_path, cmd)
+    assert out.returncode == 0 and "ran 3" in out.stdout, out.stderr
+
+
+def test_pip_install_names_no_bare_python():
+    ex = PythonExecutor(
+        image="quay.io/foo/bar:latest", container_manager=_RootLikeManager()
+    )
+    cmd = ex.get_install_command(["statsmodels"])
+    assert "command -v python3" in cmd and "-m pip install" in cmd
+    assert " python -m pip" not in f" {cmd}"
+
+
+def test_pip_settings_reach_pip_as_environment_not_flags(tmp_path):
+    """Old pip (ubuntu 22.04) rejects an unknown flag; ubuntu 24.04's pip refuses an
+    externally managed Python unless told it may install. Both settings go in as variables."""
+    import subprocess
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "python3"
+    fake.write_text(
+        "#!/bin/sh\n"
+        'echo "args=$*"\n'
+        'echo "root=$PIP_ROOT_USER_ACTION break=$PIP_BREAK_SYSTEM_PACKAGES"\n',
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    ex = PythonExecutor(image="ubuntu-based:task", container_manager=_RootLikeManager())
+    cmd = ex.get_install_command(["statsmodels"])
+    assert "--root-user-action" not in cmd and "--break-system-packages" not in cmd
+    out = subprocess.run(
+        ["/bin/sh", "-c", cmd], env={"PATH": f"{bindir}:/bin"}, capture_output=True, text=True
+    )
+    assert out.returncode == 0, out.stderr
+    assert "args=-m pip install --no-cache-dir statsmodels" in out.stdout
+    assert "root=ignore break=1" in out.stdout

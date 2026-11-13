@@ -159,7 +159,13 @@ class RExecutor(BaseExecutor):
         if not packages_to_install:
             return "echo 'No additional packages to install'"
 
-        r_command = self._biocmanager_install_expr(packages_to_install)
+        # A plain R image (r-base, rocker) ships no BiocManager, and every install stopped at
+        # "there is no package called 'BiocManager'". Install it first where it is missing.
+        r_command = (
+            "if (!requireNamespace('BiocManager', quietly = TRUE)) "
+            "install.packages('BiocManager', repos = 'https://cloud.r-project.org'); "
+            + self._biocmanager_install_expr(packages_to_install)
+        )
         if self._use_writable_r_library():
             lib_esc = _SINGULARITY_R_LIB.replace("\\", "\\\\").replace("'", "\\'")
             r_command = (

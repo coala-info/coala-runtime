@@ -37,7 +37,7 @@ def test_cran_and_bioc_use_single_biocmanager_install():
     cmd = ex.get_install_command(["ggplot2", "bioc::limma"])
     assert cmd.count("BiocManager::install") == 1
     assert "ggplot2" in cmd and "limma" in cmd
-    assert "install.packages" not in cmd
+    assert cmd.count("install.packages(") == 1, "only to bootstrap BiocManager"
 
 
 def test_singularity_like_install_uses_writable_r_library():
@@ -66,3 +66,17 @@ def test_root_docker_execution_has_no_r_libs_user_env():
     ex = RExecutor(container_manager=_Root())
     assert ex.get_execution_command("/workspace/script.R") == "Rscript /workspace/script.R"
     assert ex.exec_environment() == {}
+
+
+def test_an_image_without_biocmanager_installs_it_first():
+    """r-base images (diag-chipseq's r-base-core) ship no BiocManager: every install stopped at
+    "there is no package called 'BiocManager'"."""
+    for manager in (None, _SingularityLikeManager()):
+        ex = RExecutor(image="tbs/plain-r:latest", container_manager=manager)
+        cmd = ex.get_install_command(["praise"])
+        boot = cmd.find("requireNamespace('BiocManager'")
+        assert boot != -1, cmd
+        assert "install.packages('BiocManager'" in cmd
+        assert boot < cmd.find("BiocManager::install(")
+        if manager is not None:
+            assert cmd.find(".libPaths") < boot, "BiocManager goes in the writable library"
